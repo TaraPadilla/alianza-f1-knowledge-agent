@@ -16,3 +16,4 @@ webdriver-manager
 aiosqlite 
 langgraph-checkpoint-sqlite
 langgraph-prebuilt
+langmem
