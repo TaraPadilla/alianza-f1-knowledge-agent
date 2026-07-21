@@ -1,3 +1,13 @@
 Cursos/.env
 *.pyc
 Cursos/Curso-01/workana_scraper_login.py
+
+# Configuración local del agente
+Agente/.env
+
+# El conocimiento privado de cualquier empresa nunca debe versionarse.
+Agente/*/Private/
+
+# Archivos generados por Python y las pruebas
+__pycache__/
+.pytest_cache/
