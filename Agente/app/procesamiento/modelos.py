@@ -52,3 +52,36 @@ class DocumentoExtraido:
         return "\n\n".join(
             seccion.contenido_markdown for seccion in self.secciones
         )
+
+
+@dataclass(frozen=True)
+class FragmentoMarkdown:
+    """Fragmento listo para una etapa posterior de vectorización."""
+
+    contenido_markdown: str
+    empresa: str
+    visibilidad: str
+    ruta_relativa: str
+    titulo_seccion: str | None
+    nivel_seccion: int
+    indice_seccion: int
+    indice_fragmento_seccion: int
+    total_fragmentos_seccion: int
+    indice_fragmento_documento: int
+    referencia_fragmento: str
+
+    def metadatos(self) -> dict[str, str | int | None]:
+        """Devuelve la procedencia del fragmento sin rutas locales."""
+
+        return {
+            "empresa": self.empresa,
+            "visibilidad": self.visibilidad,
+            "ruta_relativa": self.ruta_relativa,
+            "titulo_seccion": self.titulo_seccion,
+            "nivel_seccion": self.nivel_seccion,
+            "indice_seccion": self.indice_seccion,
+            "indice_fragmento_seccion": self.indice_fragmento_seccion,
+            "total_fragmentos_seccion": self.total_fragmentos_seccion,
+            "indice_fragmento_documento": self.indice_fragmento_documento,
+            "referencia_fragmento": self.referencia_fragmento,
+        }

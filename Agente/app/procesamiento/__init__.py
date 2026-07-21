@@ -2,14 +2,23 @@
 
 from .descubrimiento import descubrir_conocimiento, descubrir_documentos
 from .extractor_markdown import extraer_documento_markdown, extraer_documentos_markdown
-from .modelos import DocumentoDescubierto, DocumentoExtraido, SeccionMarkdown
+from .fragmentacion import fragmentar_documento, fragmentar_documentos
+from .modelos import (
+    DocumentoDescubierto,
+    DocumentoExtraido,
+    FragmentoMarkdown,
+    SeccionMarkdown,
+)
 
 __all__ = [
     "DocumentoDescubierto",
     "DocumentoExtraido",
+    "FragmentoMarkdown",
     "SeccionMarkdown",
     "descubrir_conocimiento",
     "descubrir_documentos",
     "extraer_documento_markdown",
     "extraer_documentos_markdown",
+    "fragmentar_documento",
+    "fragmentar_documentos",
 ]
