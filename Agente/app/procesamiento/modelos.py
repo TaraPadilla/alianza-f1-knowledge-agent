@@ -25,3 +25,30 @@ class DocumentoDescubierto:
             "visibilidad": self.visibilidad,
             "ruta_relativa": self.ruta_relativa,
         }
+
+
+@dataclass(frozen=True)
+class SeccionMarkdown:
+    """Sección delimitada por un encabezado Markdown."""
+
+    titulo: str | None
+    nivel: int
+    contenido_markdown: str
+
+
+@dataclass(frozen=True)
+class DocumentoExtraido:
+    """Contenido Markdown leído y separado, con su procedencia original."""
+
+    empresa: str
+    visibilidad: str
+    ruta_relativa: str
+    secciones: tuple[SeccionMarkdown, ...]
+
+    @property
+    def contenido_markdown(self) -> str:
+        """Reúne las secciones sin convertirlas a texto plano."""
+
+        return "\n\n".join(
+            seccion.contenido_markdown for seccion in self.secciones
+        )
