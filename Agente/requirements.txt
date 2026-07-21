@@ -1,1 +1,3 @@
 python-dotenv
+chromadb
+google-genai
