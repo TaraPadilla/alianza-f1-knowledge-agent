@@ -7,3 +7,13 @@ arxiv
 gradio
 python-dotenv
 ipykernel
+langchain-tavily
+ddgs
+tavily-python
+bs4
+selenium
+webdriver-manager
+aiosqlite 
+langgraph-checkpoint-sqlite
+langgraph-prebuilt
+langmem
