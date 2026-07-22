@@ -1,0 +1,19 @@
+services:
+  agente:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: alianza-f1-knowledge-agent:local
+    container_name: alianza-f1-knowledge-agent
+    env_file:
+      - ./Agente/.env
+    ports:
+      - "8501:8501"
+    volumes:
+      # Los documentos permanecen en el host y conservan todas las funciones
+      # actuales de carga, eliminación e indexación de la interfaz.
+      - ./Agente/AlianzaF1/Public:/app/Agente/AlianzaF1/Public
+      - ./Agente/AlianzaF1/Private:/app/Agente/AlianzaF1/Private
+      # Chroma persiste fuera de la imagen y sobrevive al reemplazo del contenedor.
+      - ./Agente/.vectorstore:/app/Agente/.vectorstore
+    restart: unless-stopped

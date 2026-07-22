@@ -1,0 +1,49 @@
+# Control de versiones y configuración local
+.git
+.git/**
+.gitignore
+**/.env
+**/.env.*
+
+# Entornos virtuales y cachés de Python
+**/.venv
+**/.venv/**
+**/venv
+**/venv/**
+**/__pycache__
+**/__pycache__/**
+**/*.py[cod]
+**/.pytest_cache
+**/.pytest_cache/**
+**/.mypy_cache
+**/.mypy_cache/**
+
+# Índices locales y conocimiento montado desde el host
+**/.vectorstore
+**/.vectorstore/**
+Agente/*/Public
+Agente/*/Public/**
+Agente/*/Private
+Agente/*/Private/**
+
+# Material de estudio ajeno a la aplicación desplegable
+Cursos
+Cursos/**
+
+# Archivos temporales, registros y respaldos locales
+**/*.tmp
+**/*.temp
+**/*.log
+**/*.bak
+**/*.swp
+**/*~
+**/~$*
+tmp
+tmp/**
+temp
+temp/**
+
+# Archivos propios de Docker no necesarios dentro de la imagen
+Dockerfile
+docker-compose.yml
+.dockerignore
