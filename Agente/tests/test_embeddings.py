@@ -10,6 +10,7 @@ from unittest.mock import patch
 from Agente.app.procesamiento.embeddings import (
     ConfiguracionEmbeddings,
     ErrorConfiguracionEmbeddings,
+    ErrorLimiteEmbeddings,
     GeminiEmbeddings,
     cargar_configuracion_embeddings,
 )
@@ -33,6 +34,43 @@ class ModelosGeminiSimulados:
 class ClienteGeminiSimulado:
     def __init__(self) -> None:
         self.models = ModelosGeminiSimulados()
+
+
+class ModelosGeminiConLimite(ModelosGeminiSimulados):
+    def __init__(self, fallos: int, espera: str = "0s") -> None:
+        super().__init__()
+        self.fallos = fallos
+        self.espera = espera
+
+    def embed_content(self, **solicitud):
+        from google.genai.errors import ClientError
+
+        self.solicitudes.append(solicitud)
+        if len(self.solicitudes) <= self.fallos:
+            raise ClientError(
+                429,
+                {
+                    "error": {
+                        "code": 429,
+                        "message": "Límite simulado",
+                        "status": "RESOURCE_EXHAUSTED",
+                        "details": [
+                            {
+                                "@type": "type.googleapis.com/google.rpc.RetryInfo",
+                                "retryDelay": self.espera,
+                            }
+                        ],
+                    }
+                },
+            )
+        return SimpleNamespace(
+            embeddings=[SimpleNamespace(values=[1.0, 2.0, 3.0])]
+        )
+
+
+class ClienteGeminiConLimite:
+    def __init__(self, fallos: int, espera: str = "0s") -> None:
+        self.models = ModelosGeminiConLimite(fallos, espera)
 
 
 class ConfiguracionEmbeddingsTests(unittest.TestCase):
@@ -176,6 +214,58 @@ class ConfiguracionEmbeddingsTests(unittest.TestCase):
 
         self.assertTrue(texto_enviado.startswith("title: none | text:"))
         self.assertIsNone(solicitud["config"].task_type)
+
+    def test_limita_reintentos_429_a_dos(self) -> None:
+        cliente = ClienteGeminiConLimite(fallos=3)
+        esperas = []
+        configuracion = ConfiguracionEmbeddings(
+            modelo="modelo-prueba",
+            dimensiones=3,
+            directorio_vectorial=self.raiz / ".vectorstore",
+            clave_api="no-utilizada",
+        )
+        proveedor = GeminiEmbeddings(
+            configuracion,
+            cliente=cliente,
+            max_reintentos_429=2,
+            espera_maxima=45,
+            dormir=esperas.append,
+        )
+
+        with self.assertRaisesRegex(
+            ErrorLimiteEmbeddings,
+            "después de 2 reintentos",
+        ):
+            proveedor.embed_documents(["contenido"])
+
+        self.assertEqual(len(cliente.models.solicitudes), 3)
+        self.assertEqual(esperas, [0.0, 0.0])
+
+    def test_finaliza_si_espera_supera_maximo(self) -> None:
+        cliente = ClienteGeminiConLimite(fallos=1, espera="50s")
+        esperas = []
+        configuracion = ConfiguracionEmbeddings(
+            modelo="modelo-prueba",
+            dimensiones=3,
+            directorio_vectorial=self.raiz / ".vectorstore",
+            clave_api="no-utilizada",
+        )
+        proveedor = GeminiEmbeddings(
+            configuracion,
+            cliente=cliente,
+            max_reintentos_429=2,
+            espera_maxima=45,
+            dormir=esperas.append,
+        )
+
+        with self.assertRaisesRegex(
+            ErrorLimiteEmbeddings,
+            "superando el máximo permitido",
+        ):
+            proveedor.embed_documents(["contenido"])
+
+        self.assertEqual(len(cliente.models.solicitudes), 1)
+        self.assertEqual(esperas, [])
 
 
 if __name__ == "__main__":

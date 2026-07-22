@@ -28,6 +28,14 @@ class ErrorConfiguracionEmbeddings(ValueError):
     """Indica que falta o es inválida la configuración de embeddings."""
 
 
+class ErrorEmbeddings(RuntimeError):
+    """Indica que el proveedor no pudo generar los embeddings solicitados."""
+
+
+class ErrorLimiteEmbeddings(ErrorEmbeddings):
+    """Indica que Gemini agotó los reintentos permitidos por cuota."""
+
+
 @dataclass(frozen=True)
 class ConfiguracionEmbeddings:
     """Configuración validada del proveedor y el almacenamiento vectorial."""
@@ -46,11 +54,26 @@ class GeminiEmbeddings:
         configuracion: ConfiguracionEmbeddings,
         *,
         cliente: Any | None = None,
+        max_reintentos_429: int = 2,
+        espera_maxima: float = 45.0,
+        dormir=time.sleep,
     ) -> None:
+        if max_reintentos_429 < 0:
+            raise ErrorConfiguracionEmbeddings(
+                "max_reintentos_429 no puede ser negativo."
+            )
+        if espera_maxima <= 0:
+            raise ErrorConfiguracionEmbeddings(
+                "espera_maxima debe ser mayor que cero."
+            )
+
         from google import genai
 
         self.configuracion = configuracion
         self.cliente = cliente or genai.Client(api_key=configuracion.clave_api)
+        self.max_reintentos_429 = max_reintentos_429
+        self.espera_maxima = espera_maxima
+        self._dormir = dormir
 
     @property
     def _es_embedding_2(self) -> bool:
@@ -79,7 +102,7 @@ class GeminiEmbeddings:
 
     @staticmethod
     def _segundos_reintento(error: Exception) -> float:
-        """Obtiene el tiempo sugerido por Gemini sin esperar más de un minuto."""
+        """Obtiene el tiempo de reintento sugerido por Gemini."""
 
         detalles = getattr(error, "details", {})
         if isinstance(detalles, dict):
@@ -87,13 +110,13 @@ class GeminiEmbeddings:
                 espera = detalle.get("retryDelay")
                 if isinstance(espera, str) and espera.endswith("s"):
                     try:
-                        return min(60.0, max(1.0, float(espera[:-1])))
+                        return max(0.0, float(espera[:-1]))
                     except ValueError:
                         pass
 
         coincidencia = re.search(r"retry in ([\d.]+)s", str(error), re.IGNORECASE)
         if coincidencia:
-            return min(60.0, max(1.0, float(coincidencia.group(1))))
+            return max(0.0, float(coincidencia.group(1)))
         return 30.0
 
     def _solicitar_embeddings(self, *, contents, tipo_tarea: str):
@@ -101,7 +124,8 @@ class GeminiEmbeddings:
 
         from google.genai.errors import ClientError
 
-        for intento in range(5):
+        total_intentos = self.max_reintentos_429 + 1
+        for intento in range(total_intentos):
             try:
                 return self.cliente.models.embed_content(
                     model=self.configuracion.modelo,
@@ -109,9 +133,23 @@ class GeminiEmbeddings:
                     config=self._configuracion_solicitud(tipo_tarea),
                 )
             except ClientError as error:
-                if error.code != 429 or intento == 4:
-                    raise
-                time.sleep(self._segundos_reintento(error))
+                if error.code != 429:
+                    raise ErrorEmbeddings(
+                        f"Gemini rechazó la solicitud de embeddings: {error.code}."
+                    ) from error
+                if intento == total_intentos - 1:
+                    raise ErrorLimiteEmbeddings(
+                        "Gemini mantuvo el límite 429 después de "
+                        f"{self.max_reintentos_429} reintentos."
+                    ) from error
+
+                espera = self._segundos_reintento(error)
+                if espera > self.espera_maxima:
+                    raise ErrorLimiteEmbeddings(
+                        f"Gemini solicitó esperar {espera:.1f} segundos, "
+                        f"superando el máximo permitido de {self.espera_maxima:.1f}."
+                    ) from error
+                self._dormir(espera)
 
         raise RuntimeError("No fue posible generar los embeddings.")
 
@@ -222,6 +260,9 @@ def cargar_configuracion_embeddings(
 
 def crear_proveedor_embeddings(
     configuracion: ConfiguracionEmbeddings | None = None,
+    *,
+    max_reintentos_429: int = 2,
+    espera_maxima: float = 45.0,
 ) -> ProveedorEmbeddings:
     """Crea Gemini usando exclusivamente los valores definidos en el .env."""
 
@@ -235,4 +276,8 @@ def crear_proveedor_embeddings(
             "Instala las dependencias de Agente/requirements.txt."
         ) from error
 
-    return GeminiEmbeddings(configuracion)
+    return GeminiEmbeddings(
+        configuracion,
+        max_reintentos_429=max_reintentos_429,
+        espera_maxima=espera_maxima,
+    )
