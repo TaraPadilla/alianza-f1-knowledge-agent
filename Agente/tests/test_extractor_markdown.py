@@ -137,8 +137,8 @@ class ExtractorMarkdownTests(unittest.TestCase):
         self.assertEqual(extraidos[1].empresa, "EmpresaPrueba")
         self.assertEqual(extraidos[1].visibilidad, "Private")
 
-    def test_rechaza_formato_distinto_de_markdown(self) -> None:
-        documento = self._documento("datos", nombre="datos.txt")
+    def test_rechaza_formato_no_registrado(self) -> None:
+        documento = self._documento("datos", nombre="datos.csv")
 
         with self.assertRaisesRegex(ErrorExtraccionDocumento, "no soportado"):
             extraer_documento(documento)

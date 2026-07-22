@@ -99,7 +99,11 @@ class IndiceVectorialTests(unittest.TestCase):
 
         self.assertEqual(datos["ids"], [fragmento.referencia_fragmento])
         self.assertEqual(datos["documents"], [fragmento.contenido_markdown])
-        self.assertEqual(datos["metadatas"][0], fragmento.metadatos())
+        metadatos_esperados = {
+            clave: "" if valor is None else valor
+            for clave, valor in fragmento.metadatos().items()
+        }
+        self.assertEqual(datos["metadatas"][0], metadatos_esperados)
 
     def test_crea_la_coleccion_con_distancia_coseno(self) -> None:
         resultado = reconstruir_indice(
