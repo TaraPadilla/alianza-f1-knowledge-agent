@@ -14,6 +14,7 @@ from Agente.app.configuracion import (
     cargar_configuracion,
 )
 from Agente.app.generacion import cargar_configuracion_llm, probar_modelo
+from Agente.app.procesamiento.embeddings import cargar_configuracion_embeddings
 from Agente.app.servicios import (
     EXTENSIONES_CARGADOR,
     EXTENSIONES_SOPORTADAS,
@@ -23,6 +24,8 @@ from Agente.app.servicios import (
     guardar_documentos,
     listar_documentos,
     listar_empresas,
+    obtener_cantidad_fragmentos,
+    obtener_fecha_ultima_indexacion,
 )
 
 
@@ -202,7 +205,7 @@ def _aplicar_estilos() -> None:
         }
         .diagnostic-strip {
             display: grid;
-            grid-template-columns: 1fr 1.1fr 1.3fr .65fr .75fr;
+            grid-template-columns: 1fr 1.1fr 1.3fr 1.2fr .65fr .75fr;
             gap: 1px;
             overflow: hidden;
             margin: 4px 0;
@@ -363,6 +366,7 @@ def _inicializar_estado() -> None:
         "diagnostico",
         {"fragmentos": 0, "tiempo": None},
     )
+    st.session_state.setdefault("llm_model_actual", None)
 
 
 @st.cache_resource(show_spinner=False)
@@ -424,8 +428,8 @@ def _panel_lateral(
             <div class="side-brand">
                 <div class="side-orb">A</div>
                 <div>
-                    <div class="side-title">KNOWLEDGE CORE</div>
-                    <div class="side-subtitle">BOT 2050 // ONLINE</div>
+                    <div class="side-title">Agente de Conocimiento</div>
+                    <div class="side-subtitle">Chatbot Empresarial IA</div>
                 </div>
             </div>
             """,
@@ -472,6 +476,10 @@ def _panel_lateral(
             valores_env = dotenv_values(ruta_env) if ruta_env.exists() else {}
             llm_model_actual = valores_env.get("LLM_MODEL", "gemini-2.5-flash")
             
+            # Guardar el modelo actual en session_state si no existe
+            if st.session_state.llm_model_actual is None:
+                st.session_state.llm_model_actual = llm_model_actual
+            
             col_input, col_guardar = st.columns([4, 1])
             with col_input:
                 llm_model_nuevo = st.text_input(
@@ -488,6 +496,9 @@ def _panel_lateral(
                 ):
                     try:
                         actualizar_valor_env(ruta_env, "LLM_MODEL", llm_model_nuevo)
+                        st.session_state.llm_model_actual = llm_model_nuevo
+                        # Invalidar el cache del servicio para que use el nuevo modelo
+                        st.cache_resource.clear()
                         st.toast("Modelo actualizado en .env", icon="✅")
                         st.rerun()
                     except Exception as error:
@@ -532,6 +543,18 @@ def _panel_lateral(
                 unsafe_allow_html=True,
             )
             st.caption("Documentación versionable y apta para demostraciones.")
+            
+            # Mostrar estadísticas
+            cantidad_documentos = len(listar_documentos(empresa, visibilidad))
+            cantidad_fragmentos = obtener_cantidad_fragmentos(empresa, "public")
+            fecha_indexacion = obtener_fecha_ultima_indexacion(empresa, "public")
+            
+            st.caption(f"Documentos: {cantidad_documentos}")
+            st.caption(f"Fragmentos: {cantidad_fragmentos}")
+            if fecha_indexacion:
+                st.caption(f"Última indexación: {fecha_indexacion.strftime('%Y-%m-%d %H:%M')}")
+            else:
+                st.caption("Última indexación: No indexado")
             
             with st.expander("＋ Agregar documentos a Public"):
                 formatos = ", ".join(
@@ -583,6 +606,13 @@ def _panel_lateral(
                 unsafe_allow_html=True,
             )
             st.caption("Documentación local protegida y no versionada.")
+            
+            # Mostrar fecha de última indexación
+            fecha_indexacion = obtener_fecha_ultima_indexacion(empresa, "internal")
+            if fecha_indexacion:
+                st.caption(f"Última indexación: {fecha_indexacion.strftime('%Y-%m-%d %H:%M')}")
+            else:
+                st.caption("Última indexación: No indexado")
             
             with st.expander("＋ Agregar documentos a Private"):
                 formatos = ", ".join(
@@ -676,6 +706,7 @@ def _mostrar_diagnostico(
     empresa: str,
     perfil: str,
     modelo: str,
+    embedding_model: str,
     fragmentos: int,
     tiempo: float | None,
 ) -> None:
@@ -684,6 +715,7 @@ def _mostrar_diagnostico(
         ("Empresa", empresa),
         ("Perfil", ETIQUETAS_PERFIL[perfil]),
         ("Modelo", modelo),
+        ("Embeddings", embedding_model),
         ("Fragmentos", str(fragmentos)),
         ("Tiempo total", tiempo_texto),
     )
@@ -852,12 +884,14 @@ def main() -> None:
 
     _sincronizar_contexto(empresa, perfil)
     modelo = cargar_configuracion_llm().modelo
+    embedding_model = cargar_configuracion_embeddings().modelo
     diagnostico = st.session_state.diagnostico
 
     _mostrar_diagnostico(
         empresa,
         perfil,
         modelo,
+        embedding_model,
         diagnostico["fragmentos"],
         diagnostico["tiempo"],
     )

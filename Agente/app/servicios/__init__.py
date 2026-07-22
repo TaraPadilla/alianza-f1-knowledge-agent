@@ -10,7 +10,11 @@ from .documentos import (
     listar_documentos,
     listar_empresas,
 )
-from .indexacion import actualizar_conocimiento
+from .indexacion import (
+    actualizar_conocimiento,
+    obtener_cantidad_fragmentos,
+    obtener_fecha_ultima_indexacion,
+)
 
 __all__ = [
     "EXTENSIONES_SOPORTADAS",
@@ -24,4 +28,6 @@ __all__ = [
     "guardar_documentos",
     "listar_documentos",
     "listar_empresas",
+    "obtener_cantidad_fragmentos",
+    "obtener_fecha_ultima_indexacion",
 ]

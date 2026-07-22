@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Literal
 
@@ -13,6 +14,7 @@ from .modelos import FragmentoMarkdown
 
 PerfilIndice = Literal["public", "internal"]
 PERFILES_VALIDOS = ("public", "internal")
+CLAVE_ULTIMA_INDEXACION = "ultima_indexacion_utc"
 
 
 class ErrorIndiceVectorial(ValueError):
@@ -33,6 +35,14 @@ class ResultadoIndexacion:
     sin_cambios: int
     eliminados: int
     indexacion_completa: bool
+
+
+@dataclass(frozen=True)
+class EstadoIndice:
+    """Estado persistido de una coleccion vectorial."""
+
+    cantidad_fragmentos: int
+    ultima_indexacion: datetime | None
 
 
 ProgresoIndexacion = Callable[[int, int, str, str], None]
@@ -131,6 +141,67 @@ def _abrir_cliente(directorio: Path):
             "Instala las dependencias de Agente/requirements.txt."
         ) from error
     return chromadb.PersistentClient(path=str(directorio))
+
+
+def consultar_estado_indice(
+    configuracion: ConfiguracionEmbeddings,
+    empresa: str,
+    perfil: PerfilIndice,
+    *,
+    visibilidad: str | None = None,
+) -> EstadoIndice:
+    """Consulta fragmentos y ultima indexacion sin modificar la coleccion.
+
+    El filtro de visibilidad permite contar solo los documentos Private dentro
+    del indice ``internal``, que tambien contiene conocimiento Public.
+    """
+
+    if visibilidad not in {None, "Public", "Private"}:
+        raise ErrorIndiceVectorial("La visibilidad debe ser Public o Private.")
+
+    directorio = directorio_indice(configuracion, empresa, perfil)
+    if not directorio.exists():
+        return EstadoIndice(cantidad_fragmentos=0, ultima_indexacion=None)
+
+    coleccion = nombre_coleccion(empresa, perfil)
+    cliente = _abrir_cliente(directorio)
+    try:
+        nombres = {
+            item.name if hasattr(item, "name") else str(item)
+            for item in cliente.list_collections()
+        }
+        if coleccion not in nombres:
+            return EstadoIndice(cantidad_fragmentos=0, ultima_indexacion=None)
+
+        almacen = cliente.get_collection(name=coleccion)
+        if visibilidad is None:
+            cantidad = almacen.count()
+        else:
+            # Chroma no admite filtros en count(); get() devuelve solo los ids
+            # cuyos metadatos corresponden a la biblioteca solicitada.
+            datos = almacen.get(
+                where={"visibilidad": visibilidad},
+                include=["metadatas"],
+            )
+            cantidad = len(datos["ids"])
+
+        valor_fecha = (almacen.metadata or {}).get(CLAVE_ULTIMA_INDEXACION)
+        try:
+            ultima_indexacion = (
+                datetime.fromisoformat(str(valor_fecha))
+                if valor_fecha
+                else None
+            )
+        except ValueError:
+            ultima_indexacion = None
+
+        return EstadoIndice(
+            cantidad_fragmentos=cantidad,
+            ultima_indexacion=ultima_indexacion,
+        )
+    finally:
+        # Evita dejar archivos de Chroma abiertos en Windows.
+        cliente.close()
 
 
 def _validar_control_ejecucion(
@@ -263,6 +334,14 @@ def reconstruir_indice(
             if ids_obsoletos:
                 almacen.delete(ids=ids_obsoletos)
                 eliminados = len(ids_obsoletos)
+
+            # La fecha se registra solo al terminar una reconstruccion total.
+            # Una prueba limitada o una ejecucion fallida conserva la anterior.
+            metadatos_coleccion = dict(almacen.metadata or {})
+            metadatos_coleccion[CLAVE_ULTIMA_INDEXACION] = datetime.now(
+                timezone.utc
+            ).isoformat()
+            almacen.modify(metadata=metadatos_coleccion)
     finally:
         # Chroma mantiene archivos abiertos en Windows hasta cerrar el cliente.
         cliente.close()
