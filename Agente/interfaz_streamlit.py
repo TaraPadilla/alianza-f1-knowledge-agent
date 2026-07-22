@@ -472,23 +472,26 @@ def _panel_lateral(
             valores_env = dotenv_values(ruta_env) if ruta_env.exists() else {}
             llm_model_actual = valores_env.get("LLM_MODEL", "gemini-2.5-flash")
             
-            llm_model_nuevo = st.text_input(
-                "LLM_MODEL",
-                value=llm_model_actual,
-                help="Modelo de lenguaje a utilizar (ej: gemini-2.5-flash, gemini-2.5-pro)",
-            )
-            
-            if st.button(
-                "💾 Guardar Modelo",
-                use_container_width=True,
-                help="Guarda el modelo en el archivo .env",
-            ):
-                try:
-                    actualizar_valor_env(ruta_env, "LLM_MODEL", llm_model_nuevo)
-                    st.toast("Modelo actualizado en .env", icon="✅")
-                    st.rerun()
-                except Exception as error:
-                    st.error(f"Error al guardar: {error}")
+            col_input, col_guardar = st.columns([4, 1])
+            with col_input:
+                llm_model_nuevo = st.text_input(
+                    "LLM_MODEL",
+                    value=llm_model_actual,
+                    help="Modelo de lenguaje a utilizar (ej: gemini-2.5-flash, gemini-2.5-pro)",
+                    label_visibility="visible",
+                )
+            with col_guardar:
+                if st.button(
+                    "💾",
+                    help="Guarda el modelo en el archivo .env",
+                    key="guardar_llm_model",
+                ):
+                    try:
+                        actualizar_valor_env(ruta_env, "LLM_MODEL", llm_model_nuevo)
+                        st.toast("Modelo actualizado en .env", icon="✅")
+                        st.rerun()
+                    except Exception as error:
+                        st.error(f"Error al guardar: {error}")
             
             if st.button(
                 "Probar Modelo",
