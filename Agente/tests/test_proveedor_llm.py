@@ -31,6 +31,19 @@ class ClienteLLMSimulado:
         self.models = ModelosLLMSimulados(respuesta)
 
 
+class ModelosLLMConError:
+    def __init__(self, error: Exception) -> None:
+        self.error = error
+
+    def generate_content(self, **solicitud):
+        raise self.error
+
+
+class ClienteLLMConError:
+    def __init__(self, error: Exception) -> None:
+        self.models = ModelosLLMConError(error)
+
+
 class ProveedorLLMTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporal = tempfile.TemporaryDirectory()
@@ -135,6 +148,42 @@ class ProveedorLLMTests(unittest.TestCase):
 
         with self.assertRaisesRegex(ErrorLLM, "no indica"):
             proveedor.generar("Sistema", "Usuario")
+
+    def test_clasifica_errores_api_sin_exponer_el_detalle_original(self) -> None:
+        from google.genai.errors import APIError
+
+        casos = (
+            (401, "UNAUTHENTICATED", "API key"),
+            (403, "PERMISSION_DENIED", "no tiene permiso"),
+            (404, "NOT_FOUND", "modelo-prueba"),
+            (429, "RESOURCE_EXHAUSTED", "cuota agotada"),
+            (400, "INVALID_ARGUMENT", "no fue válida"),
+            (503, "UNAVAILABLE", "fuera de servicio"),
+            (504, "DEADLINE_EXCEEDED", "tiempo máximo"),
+        )
+        for codigo, estado, esperado in casos:
+            with self.subTest(codigo=codigo):
+                error_api = APIError(
+                    codigo,
+                    {
+                        "error": {
+                            "status": estado,
+                            "message": "detalle-interno-no-debe-mostrarse",
+                        }
+                    },
+                )
+                proveedor = GeminiLLM(
+                    ConfiguracionLLM("modelo-prueba", "no-utilizada"),
+                    cliente=ClienteLLMConError(error_api),
+                )
+
+                with self.assertRaises(ErrorLLM) as contexto:
+                    proveedor.generar("Sistema", "Usuario")
+
+                mensaje = str(contexto.exception)
+                self.assertIn(esperado, mensaje)
+                self.assertIn(f"HTTP {codigo}", mensaje)
+                self.assertNotIn("detalle-interno", mensaje)
 
 
 if __name__ == "__main__":

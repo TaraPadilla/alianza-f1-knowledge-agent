@@ -70,6 +70,64 @@ ESQUEMA_RESPUESTA = {
 }
 
 
+def _descripcion_codigo(codigo: int | None, estado: str | None) -> str:
+    """Construye una referencia técnica segura sin incluir la respuesta privada."""
+
+    if codigo:
+        return f"HTTP {codigo}"
+    if estado:
+        return f"estado {estado}"
+    return "sin código disponible"
+
+
+def _mensaje_error_api(error: Any, modelo: str) -> str:
+    """Traduce errores de Gemini a acciones comprensibles para el usuario."""
+
+    codigo = getattr(error, "code", None)
+    estado = str(getattr(error, "status", "") or "").upper()
+    referencia = _descripcion_codigo(codigo, estado)
+
+    if codigo == 401 or estado == "UNAUTHENTICATED":
+        return (
+            f"Gemini rechazó la API key ({referencia}). "
+            "Verifica GEMINI_API_KEY."
+        )
+    if codigo == 403 or estado == "PERMISSION_DENIED":
+        return (
+            f"La API key no tiene permiso para usar Gemini ({referencia}). "
+            "Revisa el proyecto y los permisos asociados a la credencial."
+        )
+    if codigo == 404 or estado == "NOT_FOUND":
+        return (
+            f"El modelo '{modelo}' no está disponible para esta credencial "
+            f"({referencia}). Revisa LLM_MODEL."
+        )
+    if codigo == 429 or estado == "RESOURCE_EXHAUSTED":
+        return (
+            f"Gemini rechazó la consulta por límite de solicitudes o cuota "
+            f"agotada ({referencia}). Espera unos minutos y revisa la cuota."
+        )
+    if codigo in {408, 504} or estado in {"DEADLINE_EXCEEDED", "TIMEOUT"}:
+        return (
+            f"Gemini superó el tiempo máximo de respuesta ({referencia}). "
+            "Intenta nuevamente."
+        )
+    if codigo == 400 or estado == "INVALID_ARGUMENT":
+        return (
+            f"La solicitud enviada a Gemini no fue válida ({referencia}). "
+            "Revisa LLM_MODEL y el tamaño del contexto recuperado."
+        )
+    if isinstance(codigo, int) and 500 <= codigo < 600:
+        return (
+            f"Gemini está temporalmente fuera de servicio ({referencia}). "
+            "Intenta nuevamente más tarde."
+        )
+    return (
+        f"Gemini rechazó la solicitud ({referencia}). "
+        "Revisa la configuración y vuelve a intentarlo."
+    )
+
+
 class GeminiLLM:
     """Adaptador directo sobre Google Gen AI con respuesta JSON estructurada."""
 
@@ -107,7 +165,7 @@ class GeminiLLM:
             )
         except APIError as error:
             raise ErrorLLM(
-                "Gemini no pudo generar la respuesta documental."
+                _mensaje_error_api(error, self.configuracion.modelo)
             ) from error
 
         datos = getattr(respuesta, "parsed", None)
