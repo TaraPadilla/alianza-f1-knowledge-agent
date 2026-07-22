@@ -2,6 +2,7 @@
 
 from .agente import ResultadoConsultaRAG, ServicioAgente, crear_servicio_agente
 from .documentos import (
+    EXTENSIONES_CARGADOR,
     EXTENSIONES_SOPORTADAS,
     DocumentoInterfaz,
     guardar_documentos,
@@ -12,6 +13,7 @@ from .indexacion import actualizar_conocimiento
 
 __all__ = [
     "EXTENSIONES_SOPORTADAS",
+    "EXTENSIONES_CARGADOR",
     "DocumentoInterfaz",
     "ResultadoConsultaRAG",
     "ServicioAgente",

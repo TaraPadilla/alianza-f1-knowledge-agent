@@ -6,10 +6,11 @@ from pathlib import Path
 
 from Agente.app.procesamiento import (
     DocumentoDescubierto,
-    extraer_documento_markdown,
-    extraer_documentos_markdown,
+    ErrorExtraccionDocumento,
+    extraer_documento,
+    extraer_documentos,
 )
-from Agente.app.procesamiento.extractor_markdown import ErrorExtraccionMarkdown
+from Agente.app.procesamiento.extractores.markdown import extraer_markdown
 
 
 class ExtractorMarkdownTests(unittest.TestCase):
@@ -42,7 +43,7 @@ class ExtractorMarkdownTests(unittest.TestCase):
             "Introducción\n\n# Principal\nTexto\n\n## Detalle\nMás texto"
         )
 
-        extraido = extraer_documento_markdown(documento)
+        extraido = extraer_markdown(documento)
 
         self.assertEqual(len(extraido.secciones), 3)
         self.assertIsNone(extraido.secciones[0].titulo)
@@ -63,7 +64,7 @@ class ExtractorMarkdownTests(unittest.TestCase):
         )
         documento = self._documento(markdown)
 
-        extraido = extraer_documento_markdown(documento)
+        extraido = extraer_markdown(documento)
 
         self.assertEqual(extraido.contenido_markdown, markdown)
 
@@ -71,7 +72,7 @@ class ExtractorMarkdownTests(unittest.TestCase):
         markdown = "# Ejemplo\n\n```python\n# Esto no es una sección\nprint('ok')\n```"
         documento = self._documento(markdown)
 
-        extraido = extraer_documento_markdown(documento)
+        extraido = extraer_markdown(documento)
 
         self.assertEqual(len(extraido.secciones), 1)
         self.assertIn("# Esto no es una sección", extraido.secciones[0].contenido_markdown)
@@ -79,7 +80,7 @@ class ExtractorMarkdownTests(unittest.TestCase):
     def test_normaliza_saltos_y_lineas_vacias_excesivas(self) -> None:
         documento = self._documento("# Título\r\n\r\n\r\n\r\nTexto\r\n")
 
-        extraido = extraer_documento_markdown(documento)
+        extraido = extraer_markdown(documento)
 
         self.assertEqual(extraido.contenido_markdown, "# Título\n\nTexto")
 
@@ -87,7 +88,7 @@ class ExtractorMarkdownTests(unittest.TestCase):
         markdown = "# Tabla\n\n| Nombre   | Valor |\n|----------|-------|"
         documento = self._documento(markdown)
 
-        extraido = extraer_documento_markdown(documento)
+        extraido = extraer_markdown(documento)
 
         self.assertEqual(extraido.contenido_markdown, markdown)
 
@@ -97,7 +98,7 @@ class ExtractorMarkdownTests(unittest.TestCase):
             encoding="utf-8-sig",
         )
 
-        extraido = extraer_documento_markdown(documento)
+        extraido = extraer_markdown(documento)
 
         self.assertEqual(extraido.secciones[0].titulo, "Información")
         self.assertNotIn("\ufeff", extraido.contenido_markdown)
@@ -105,7 +106,7 @@ class ExtractorMarkdownTests(unittest.TestCase):
     def test_documento_sin_encabezados_es_una_sola_seccion(self) -> None:
         documento = self._documento("Un párrafo sin encabezado.")
 
-        extraido = extraer_documento_markdown(documento)
+        extraido = extraer_markdown(documento)
 
         self.assertEqual(len(extraido.secciones), 1)
         self.assertIsNone(extraido.secciones[0].titulo)
@@ -114,7 +115,7 @@ class ExtractorMarkdownTests(unittest.TestCase):
     def test_documento_vacio_no_crea_secciones(self) -> None:
         documento = self._documento("")
 
-        extraido = extraer_documento_markdown(documento)
+        extraido = extraer_markdown(documento)
 
         self.assertEqual(extraido.secciones, ())
         self.assertEqual(extraido.contenido_markdown, "")
@@ -127,7 +128,7 @@ class ExtractorMarkdownTests(unittest.TestCase):
             visibilidad="Private",
         )
 
-        extraidos = extraer_documentos_markdown([primero, segundo])
+        extraidos = extraer_documentos([primero, segundo])
 
         self.assertEqual(
             [documento.ruta_relativa for documento in extraidos],
@@ -139,8 +140,8 @@ class ExtractorMarkdownTests(unittest.TestCase):
     def test_rechaza_formato_distinto_de_markdown(self) -> None:
         documento = self._documento("datos", nombre="datos.txt")
 
-        with self.assertRaisesRegex(ErrorExtraccionMarkdown, "no es Markdown"):
-            extraer_documento_markdown(documento)
+        with self.assertRaisesRegex(ErrorExtraccionDocumento, "no soportado"):
+            extraer_documento(documento)
 
 
 if __name__ == "__main__":

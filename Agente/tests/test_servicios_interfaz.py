@@ -67,7 +67,10 @@ class ServiciosInterfazTests(unittest.TestCase):
         )
 
     def test_formatos_soportados_estan_centralizados(self) -> None:
-        self.assertEqual(EXTENSIONES_SOPORTADAS, ("md", "markdown"))
+        self.assertEqual(
+            EXTENSIONES_SOPORTADAS,
+            ("md", "markdown", "txt", "docx", "pdf"),
+        )
 
     def test_guarda_y_lista_markdown_en_visibilidad_seleccionada(self) -> None:
         guardados = guardar_documentos(
@@ -91,6 +94,7 @@ class ServiciosInterfazTests(unittest.TestCase):
         casos = (
             ("../fuera.md", b"texto", "nombre simple"),
             ("datos.csv", b"a,b", "Formato no soportado"),
+            ("legado.doc", b"contenido", "Convierte el archivo a .docx"),
             ("invalido.md", b"\xff\xfe\x00", "UTF-8"),
         )
         for nombre, contenido, mensaje in casos:
@@ -154,7 +158,7 @@ class ServiciosInterfazTests(unittest.TestCase):
     @patch("Agente.app.servicios.indexacion.cargar_configuracion_embeddings")
     @patch("Agente.app.servicios.indexacion.reconstruir_indice")
     @patch("Agente.app.servicios.indexacion.fragmentar_documentos")
-    @patch("Agente.app.servicios.indexacion.extraer_documentos_markdown")
+    @patch("Agente.app.servicios.indexacion.extraer_documentos")
     @patch("Agente.app.servicios.indexacion.descubrir_documentos")
     @patch("Agente.app.servicios.indexacion.cargar_configuracion")
     def test_public_actualiza_public_e_internal(
@@ -194,7 +198,7 @@ class ServiciosInterfazTests(unittest.TestCase):
     @patch("Agente.app.servicios.indexacion.cargar_configuracion_embeddings")
     @patch("Agente.app.servicios.indexacion.reconstruir_indice")
     @patch("Agente.app.servicios.indexacion.fragmentar_documentos", return_value=[])
-    @patch("Agente.app.servicios.indexacion.extraer_documentos_markdown", return_value=[])
+    @patch("Agente.app.servicios.indexacion.extraer_documentos", return_value=[])
     @patch("Agente.app.servicios.indexacion.descubrir_documentos", return_value=[])
     @patch("Agente.app.servicios.indexacion.cargar_configuracion", return_value=SimpleNamespace())
     def test_private_actualiza_solo_internal(

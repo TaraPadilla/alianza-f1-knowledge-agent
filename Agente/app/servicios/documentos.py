@@ -4,20 +4,18 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from tempfile import NamedTemporaryFile
 from typing import Iterable, Protocol
 
 from ..configuracion import RAIZ_AGENTE, Configuracion, cargar_configuracion
-from ..procesamiento import descubrir_documentos
-
-
-# La interfaz consulta esta constante. Al agregar un extractor nuevo bastará
-# con ampliar aquí sus extensiones, sin rediseñar el cargador visual.
-FORMATOS_SOPORTADOS = {"Markdown": ("md", "markdown")}
-EXTENSIONES_SOPORTADAS = tuple(
-    extension
-    for extensiones in FORMATOS_SOPORTADOS.values()
-    for extension in extensiones
+from ..procesamiento import (
+    EXTENSIONES_CARGADOR,
+    EXTENSIONES_SOPORTADAS,
+    DocumentoDescubierto,
+    descubrir_documentos,
+    extraer_documento,
 )
+from ..procesamiento.extractores import validar_extension
 
 
 class ArchivoCargado(Protocol):
@@ -81,10 +79,7 @@ def _validar_nombre_archivo(nombre: str) -> str:
     limpio = nombre.strip()
     if not limpio or Path(limpio).name != limpio:
         raise ValueError("El archivo debe tener un nombre simple y seguro.")
-    extension = Path(limpio).suffix.casefold().lstrip(".")
-    if extension not in EXTENSIONES_SOPORTADAS:
-        permitidas = ", ".join(f".{valor}" for valor in EXTENSIONES_SOPORTADAS)
-        raise ValueError(f"Formato no soportado. Usa: {permitidas}.")
+    validar_extension(limpio)
     return limpio
 
 
@@ -107,11 +102,33 @@ def guardar_documentos(
     for archivo in archivos:
         nombre = _validar_nombre_archivo(archivo.name)
         contenido = archivo.getvalue()
-        # Validar UTF-8 aquí permite fallar antes de llegar al extractor.
+        ruta_temporal: Path | None = None
         try:
-            contenido.decode("utf-8-sig")
-        except UnicodeDecodeError as error:
-            raise ValueError(f"'{nombre}' no contiene texto UTF-8 válido.") from error
-        (destino / nombre).write_bytes(contenido)
+            # La misma extracción del pipeline valida la carga antes de reemplazar
+            # un archivo existente. Así no se duplica lógica por formato.
+            with NamedTemporaryFile(
+                prefix=".carga-",
+                suffix=Path(nombre).suffix,
+                dir=destino,
+                delete=False,
+            ) as temporal:
+                temporal.write(contenido)
+                ruta_temporal = Path(temporal.name)
+
+            extraer_documento(
+                DocumentoDescubierto(
+                    empresa=configuracion.empresa,
+                    visibilidad=visibilidad,
+                    ruta_relativa=(
+                        f"{configuracion.empresa}/{visibilidad}/{nombre}"
+                    ),
+                    ruta_archivo=ruta_temporal,
+                )
+            )
+            ruta_temporal.replace(destino / nombre)
+            ruta_temporal = None
+        finally:
+            if ruta_temporal is not None and ruta_temporal.exists():
+                ruta_temporal.unlink()
         guardados.append(nombre)
     return tuple(guardados)

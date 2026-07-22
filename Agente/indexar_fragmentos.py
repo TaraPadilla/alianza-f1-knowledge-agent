@@ -6,8 +6,9 @@ import argparse
 
 from app.configuracion import ErrorConfiguracion, cargar_configuracion
 from app.procesamiento import (
+    ErrorExtraccionDocumento,
     descubrir_documentos,
-    extraer_documentos_markdown,
+    extraer_documentos,
     fragmentar_documentos,
     reconstruir_indice,
 )
@@ -17,7 +18,6 @@ from app.procesamiento.embeddings import (
     cargar_configuracion_embeddings,
     crear_proveedor_embeddings,
 )
-from app.procesamiento.extractor_markdown import ErrorExtraccionMarkdown
 from app.procesamiento.fragmentacion import ErrorFragmentacion
 from app.procesamiento.indice_vectorial import ErrorIndiceVectorial
 
@@ -47,7 +47,7 @@ def main() -> None:
             visibilidades=visibilidades,
         )
         descubiertos = descubrir_documentos(configuracion_proyecto)
-        extraidos = extraer_documentos_markdown(descubiertos)
+        extraidos = extraer_documentos(descubiertos)
         fragmentos = fragmentar_documentos(
             extraidos,
             tamano_maximo=argumentos.tamano_maximo,
@@ -82,7 +82,7 @@ def main() -> None:
         ErrorConfiguracion,
         ErrorConfiguracionEmbeddings,
         ErrorEmbeddings,
-        ErrorExtraccionMarkdown,
+        ErrorExtraccionDocumento,
         ErrorFragmentacion,
         ErrorIndiceVectorial,
     ) as error:

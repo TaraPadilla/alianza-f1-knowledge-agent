@@ -10,7 +10,7 @@ from app.procesamiento import descubrir_conocimiento
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Lista documentos Markdown sin leer su contenido.",
+        description="Lista documentos soportados sin leer su contenido.",
     )
     parser.add_argument(
         "--empresa",
@@ -31,7 +31,7 @@ def main() -> None:
         parser.error(str(error))
 
     if not documentos:
-        print("No se encontraron documentos Markdown.")
+        print("No se encontraron documentos soportados.")
         return
 
     print(f"Documentos encontrados: {len(documentos)}")

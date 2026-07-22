@@ -31,19 +31,26 @@ def _respuesta_fallback() -> RespuestaGenerada:
 def _fuente(fragmento: FragmentoRecuperado) -> FuenteRespuesta:
     ruta_portable = fragmento.ruta_relativa.replace("\\", "/")
     return FuenteRespuesta(
-        archivo=PurePosixPath(ruta_portable).name,
+        archivo=(
+            fragmento.archivo_original or PurePosixPath(ruta_portable).name
+        ),
         seccion=fragmento.titulo_seccion or "Sin encabezado",
         referencia_fragmento=fragmento.referencia_fragmento,
         visibilidad=fragmento.visibilidad,
+        tipo_archivo=fragmento.tipo_archivo,
+        pagina=fragmento.pagina,
     )
 
 
 def _formatear_respuesta(texto: str, fuentes: tuple[FuenteRespuesta, ...]) -> str:
     referencias = "\n".join(
-        (
-            f"- {fuente.archivo} — Sección: {fuente.seccion} "
-            f"— Referencia: {fuente.referencia_fragmento}"
+        f"- {fuente.archivo} — "
+        + (
+            f"Página: {fuente.pagina} "
+            if fuente.pagina is not None
+            else f"Sección: {fuente.seccion} "
         )
+        + f"— Referencia: {fuente.referencia_fragmento}"
         for fuente in fuentes
     )
     return f"{texto.strip()}\n\nFuentes:\n{referencias}"

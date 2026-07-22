@@ -29,11 +29,12 @@ class DocumentoDescubierto:
 
 @dataclass(frozen=True)
 class SeccionMarkdown:
-    """Sección delimitada por un encabezado Markdown."""
+    """Sección normalizada a Markdown, sin importar el formato de origen."""
 
     titulo: str | None
     nivel: int
     contenido_markdown: str
+    pagina: int | None = None
 
 
 @dataclass(frozen=True)
@@ -44,6 +45,8 @@ class DocumentoExtraido:
     visibilidad: str
     ruta_relativa: str
     secciones: tuple[SeccionMarkdown, ...]
+    tipo_archivo: str = "markdown"
+    archivo_original: str = ""
 
     @property
     def contenido_markdown(self) -> str:
@@ -69,6 +72,9 @@ class FragmentoMarkdown:
     total_fragmentos_seccion: int
     indice_fragmento_documento: int
     referencia_fragmento: str
+    tipo_archivo: str = "markdown"
+    archivo_original: str = ""
+    pagina: int | None = None
 
     def metadatos(self) -> dict[str, str | int | None]:
         """Devuelve la procedencia del fragmento sin rutas locales."""
@@ -77,7 +83,10 @@ class FragmentoMarkdown:
             "empresa": self.empresa,
             "visibilidad": self.visibilidad,
             "ruta_relativa": self.ruta_relativa,
+            "tipo_archivo": self.tipo_archivo,
+            "archivo_original": self.archivo_original,
             "titulo_seccion": self.titulo_seccion,
+            "pagina": self.pagina,
             "nivel_seccion": self.nivel_seccion,
             "indice_seccion": self.indice_seccion,
             "indice_fragmento_seccion": self.indice_fragmento_seccion,

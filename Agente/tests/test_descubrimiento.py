@@ -19,8 +19,11 @@ class DescubrimientoTests(unittest.TestCase):
         self._crear_archivo("EmpresaUno/Public/manual.md")
         self._crear_archivo("EmpresaUno/Public/guias/inicio.MARKDOWN")
         self._crear_archivo("EmpresaUno/Private/politicas.md")
+        self._crear_archivo("EmpresaUno/Private/notas.txt")
+        self._crear_archivo("EmpresaUno/Public/manual.docx")
+        self._crear_archivo("EmpresaUno/Public/catalogo.PDF")
         self._crear_archivo("EmpresaUno/Private/datos.csv")
-        self._crear_archivo("EmpresaUno/Public/notas.txt")
+        self._crear_archivo("EmpresaUno/Public/legado.doc")
         self._crear_archivo("EmpresaUno/Public/.oculto.md")
         self._crear_archivo("EmpresaDos/Public/otro.md")
 
@@ -42,7 +45,7 @@ class DescubrimientoTests(unittest.TestCase):
             raiz_agente=self.raiz,
         )
 
-        self.assertEqual(len(documentos), 3)
+        self.assertEqual(len(documentos), 6)
         self.assertEqual(
             {documento.visibilidad for documento in documentos},
             {"Public", "Private"},
@@ -55,7 +58,7 @@ class DescubrimientoTests(unittest.TestCase):
             raiz_agente=self.raiz,
         )
 
-        self.assertEqual(len(documentos), 2)
+        self.assertEqual(len(documentos), 4)
         self.assertTrue(
             all(documento.visibilidad == "Public" for documento in documentos)
         )
@@ -67,7 +70,7 @@ class DescubrimientoTests(unittest.TestCase):
             raiz_agente=self.raiz,
         )
 
-        self.assertEqual(len(documentos), 1)
+        self.assertEqual(len(documentos), 2)
         self.assertEqual(documentos[0].visibilidad, "Private")
 
     def test_conserva_empresa_visibilidad_y_ruta_relativa(self) -> None:
@@ -76,7 +79,12 @@ class DescubrimientoTests(unittest.TestCase):
             visibilidades="Private",
             raiz_agente=self.raiz,
         )
-        datos = documentos[0].como_dict()
+        documento = next(
+            documento
+            for documento in documentos
+            if documento.ruta_relativa.endswith("politicas.md")
+        )
+        datos = documento.como_dict()
 
         self.assertEqual(
             datos,
@@ -88,7 +96,7 @@ class DescubrimientoTests(unittest.TestCase):
         )
         self.assertNotIn(str(self.raiz), datos["ruta_relativa"])
 
-    def test_ignora_formatos_que_no_son_markdown(self) -> None:
+    def test_ignora_formatos_no_registrados(self) -> None:
         documentos = descubrir_conocimiento(
             empresa="EmpresaUno",
             raiz_agente=self.raiz,
@@ -96,7 +104,7 @@ class DescubrimientoTests(unittest.TestCase):
 
         rutas = {documento.ruta_relativa for documento in documentos}
         self.assertNotIn("EmpresaUno/Private/datos.csv", rutas)
-        self.assertNotIn("EmpresaUno/Public/notas.txt", rutas)
+        self.assertNotIn("EmpresaUno/Public/legado.doc", rutas)
 
     def test_ignora_archivos_ocultos(self) -> None:
         documentos = descubrir_conocimiento(

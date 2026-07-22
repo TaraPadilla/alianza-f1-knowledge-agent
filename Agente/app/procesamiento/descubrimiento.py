@@ -1,4 +1,4 @@
-"""Localiza documentos Markdown sin extraer su contenido."""
+"""Localiza documentos registrados sin extraer su contenido."""
 
 from __future__ import annotations
 
@@ -6,10 +6,8 @@ from pathlib import Path
 from typing import Iterable
 
 from ..configuracion import Configuracion, cargar_configuracion
+from .extractores import EXTENSIONES_REGISTRADAS
 from .modelos import DocumentoDescubierto
-
-
-EXTENSIONES_MARKDOWN = {".md", ".markdown"}
 
 
 def _es_ruta_oculta(ruta: Path) -> bool:
@@ -21,10 +19,10 @@ def _es_ruta_oculta(ruta: Path) -> bool:
 def descubrir_documentos(
     configuracion: Configuracion,
 ) -> list[DocumentoDescubierto]:
-    """Descubre Markdown en las visibilidades habilitadas de una empresa.
+    """Descubre formatos registrados en los niveles habilitados de una empresa.
 
     Esta función solo inspecciona nombres y rutas. La lectura del contenido se
-    realizará posteriormente en el extractor Markdown.
+    realiza posteriormente mediante el selector de extractores.
     """
 
     documentos: list[DocumentoDescubierto] = []
@@ -41,7 +39,7 @@ def descubrir_documentos(
                 continue
             if ruta_archivo.is_symlink() or not ruta_archivo.is_file():
                 continue
-            if ruta_archivo.suffix.lower() not in EXTENSIONES_MARKDOWN:
+            if ruta_archivo.suffix.lower() not in EXTENSIONES_REGISTRADAS:
                 continue
 
             # Se almacena una ruta con separadores "/" para que el metadato sea
@@ -73,7 +71,7 @@ def descubrir_conocimiento(
     raiz_agente: Path | None = None,
     ruta_env: Path | None = None,
 ) -> list[DocumentoDescubierto]:
-    """Carga la configuración y descubre los Markdown de la empresa activa."""
+    """Carga la configuración y descubre documentos de la empresa activa."""
 
     configuracion = cargar_configuracion(
         empresa=empresa,

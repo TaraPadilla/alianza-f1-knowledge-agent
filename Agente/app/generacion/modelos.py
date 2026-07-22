@@ -48,6 +48,8 @@ class FuenteRespuesta:
     seccion: str
     referencia_fragmento: str
     visibilidad: str
+    tipo_archivo: str = "markdown"
+    pagina: int | None = None
 
 
 @dataclass(frozen=True)

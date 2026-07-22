@@ -11,6 +11,7 @@ import streamlit as st
 from Agente.app.configuracion import cargar_configuracion
 from Agente.app.generacion import cargar_configuracion_llm
 from Agente.app.servicios import (
+    EXTENSIONES_CARGADOR,
     EXTENSIONES_SOPORTADAS,
     actualizar_conocimiento,
     crear_servicio_agente,
@@ -455,15 +456,18 @@ def _panel_lateral(
             st.caption(descripcion)
 
             with st.expander(f"＋ Agregar documentos a {visibilidad}"):
-                st.caption("Formato disponible actualmente: Markdown.")
+                formatos = ", ".join(
+                    f".{extension}" for extension in EXTENSIONES_SOPORTADAS
+                )
+                st.caption(f"Formatos disponibles: {formatos}.")
                 archivos = st.file_uploader(
                     "Seleccionar documentos",
-                    type=list(EXTENSIONES_SOPORTADAS),
+                    type=list(EXTENSIONES_CARGADOR),
                     accept_multiple_files=True,
                     label_visibility="collapsed",
                     help=(
-                        "Los demás formatos podrán agregarse posteriormente "
-                        "mediante nuevos módulos de extracción."
+                        "Los PDF deben contener texto seleccionable. "
+                        "Para archivos .doc, convierte primero a .docx."
                     ),
                 )
                 guardar = st.button(
@@ -564,11 +568,16 @@ def _mostrar_fuentes(fuentes: list[dict]) -> None:
     if not fuentes:
         return
     for fuente in fuentes:
+        ubicacion = (
+            f"Página: {fuente['pagina']}"
+            if fuente.get("pagina") is not None
+            else f"Sección: {escape(fuente['seccion'])}"
+        )
         st.markdown(
             (
                 '<div class="fuente-rag">'
                 f"📄 <strong>{escape(fuente['archivo'])}</strong><br>"
-                f"Sección: {escape(fuente['seccion'])}"
+                f"{ubicacion}"
                 "</div>"
             ),
             unsafe_allow_html=True,
@@ -591,7 +600,7 @@ def _panel_fuentes() -> None:
     # Una sección puede llegar desde varios fragmentos; se presenta una sola vez.
     fuentes_unicas = list(
         {
-            (fuente["archivo"], fuente["seccion"]): fuente
+            (fuente["archivo"], fuente["seccion"], fuente.get("pagina")): fuente
             for fuente in fuentes
         }.values()
     )

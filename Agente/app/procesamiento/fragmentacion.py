@@ -178,6 +178,12 @@ def fragmentar_documento(
                     total_fragmentos_seccion=total_seccion,
                     indice_fragmento_documento=indice_documento,
                     referencia_fragmento=referencia,
+                    tipo_archivo=documento.tipo_archivo,
+                    archivo_original=(
+                        documento.archivo_original
+                        or documento.ruta_relativa.rsplit("/", maxsplit=1)[-1]
+                    ),
+                    pagina=seccion.pagina,
                 )
             )
             indice_documento += 1

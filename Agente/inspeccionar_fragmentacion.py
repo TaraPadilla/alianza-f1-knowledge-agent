@@ -6,11 +6,11 @@ import argparse
 
 from app.configuracion import ErrorConfiguracion
 from app.procesamiento import (
+    ErrorExtraccionDocumento,
     descubrir_conocimiento,
-    extraer_documentos_markdown,
+    extraer_documentos,
     fragmentar_documento,
 )
-from app.procesamiento.extractor_markdown import ErrorExtraccionMarkdown
 from app.procesamiento.fragmentacion import ErrorFragmentacion
 
 
@@ -35,7 +35,7 @@ def main() -> None:
             empresa=argumentos.empresa,
             visibilidades=argumentos.visibilidades,
         )
-        extraidos = extraer_documentos_markdown(descubiertos)
+        extraidos = extraer_documentos(descubiertos)
         resultados = [
             (
                 documento,
@@ -47,11 +47,11 @@ def main() -> None:
             )
             for documento in extraidos
         ]
-    except (ErrorConfiguracion, ErrorExtraccionMarkdown, ErrorFragmentacion) as error:
+    except (ErrorConfiguracion, ErrorExtraccionDocumento, ErrorFragmentacion) as error:
         parser.error(str(error))
 
     if not resultados:
-        print("No se encontraron documentos Markdown para fragmentar.")
+        print("No se encontraron documentos soportados para fragmentar.")
         return
 
     total = sum(len(fragmentos) for _, fragmentos in resultados)

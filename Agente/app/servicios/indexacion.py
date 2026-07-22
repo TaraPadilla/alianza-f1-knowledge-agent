@@ -7,7 +7,7 @@ from typing import Callable
 from ..configuracion import cargar_configuracion
 from ..procesamiento import (
     descubrir_documentos,
-    extraer_documentos_markdown,
+    extraer_documentos,
     fragmentar_documentos,
     reconstruir_indice,
 )
@@ -57,7 +57,7 @@ def actualizar_conocimiento(
             visibilidades=visibilidades,
         )
         fragmentos = fragmentar_documentos(
-            extraer_documentos_markdown(
+            extraer_documentos(
                 descubrir_documentos(configuracion_proyecto)
             ),
             tamano_maximo=tamano_maximo,

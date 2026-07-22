@@ -11,6 +11,11 @@ def ensamblar_contexto(resultados: list[FragmentoRecuperado]) -> str:
     bloques: list[str] = []
     for posicion, fragmento in enumerate(resultados, start=1):
         seccion = fragmento.titulo_seccion or "Sin encabezado"
+        ubicacion = (
+            f"Página: {fragmento.pagina}"
+            if fragmento.pagina is not None
+            else f"Sección: {seccion}"
+        )
         bloques.append(
             "\n".join(
                 (
@@ -18,7 +23,8 @@ def ensamblar_contexto(resultados: list[FragmentoRecuperado]) -> str:
                     f"Empresa: {fragmento.empresa}",
                     f"Visibilidad: {fragmento.visibilidad}",
                     f"Documento: {fragmento.ruta_relativa}",
-                    f"Sección: {seccion}",
+                    f"Tipo: {fragmento.tipo_archivo}",
+                    ubicacion,
                     f"Referencia: {fragmento.referencia_fragmento}",
                     "Contenido:",
                     fragmento.contenido_markdown,

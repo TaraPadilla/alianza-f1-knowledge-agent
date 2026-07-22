@@ -30,6 +30,9 @@ class FragmentoRecuperado:
     total_fragmentos_seccion: int
     indice_fragmento_documento: int
     referencia_fragmento: str
+    tipo_archivo: str = "markdown"
+    archivo_original: str = ""
+    pagina: int | None = None
 
     @classmethod
     def desde_chroma(
@@ -41,6 +44,7 @@ class FragmentoRecuperado:
         """Convierte la respuesta escalar de Chroma al modelo del proyecto."""
 
         titulo = metadatos.get("titulo_seccion")
+        pagina = metadatos.get("pagina")
         return cls(
             contenido_markdown=contenido_markdown,
             distancia=float(distancia),
@@ -60,4 +64,7 @@ class FragmentoRecuperado:
                 metadatos["indice_fragmento_documento"]
             ),
             referencia_fragmento=str(metadatos["referencia_fragmento"]),
+            tipo_archivo=str(metadatos.get("tipo_archivo") or "markdown"),
+            archivo_original=str(metadatos.get("archivo_original") or ""),
+            pagina=int(pagina) if pagina not in {None, ""} else None,
         )
