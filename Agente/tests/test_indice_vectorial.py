@@ -9,6 +9,7 @@ import chromadb
 from Agente.app.procesamiento.embeddings import ConfiguracionEmbeddings
 from Agente.app.procesamiento.indice_vectorial import (
     ErrorIndiceVectorial,
+    consultar_estado_indice,
     reconstruir_indice,
 )
 from Agente.app.procesamiento.modelos import FragmentoMarkdown
@@ -268,6 +269,80 @@ class IndiceVectorialTests(unittest.TestCase):
         self.assertNotEqual(publico.coleccion, interno.coleccion)
         self.assertEqual(len(self._leer_resultado(publico)["ids"]), 1)
         self.assertEqual(len(self._leer_resultado(interno)["ids"]), 2)
+
+    def test_consulta_fragmentos_filtrados_por_visibilidad(self) -> None:
+        reconstruir_indice(
+            [
+                self._fragmento(1),
+                self._fragmento(2, "Private"),
+                self._fragmento(3, "Private"),
+            ],
+            perfil="internal",
+            configuracion=self.configuracion,
+            proveedor=self.proveedor,
+        )
+
+        estado_total = consultar_estado_indice(
+            self.configuracion,
+            "EmpresaPrueba",
+            "internal",
+        )
+        estado_public = consultar_estado_indice(
+            self.configuracion,
+            "EmpresaPrueba",
+            "internal",
+            visibilidad="Public",
+        )
+        estado_private = consultar_estado_indice(
+            self.configuracion,
+            "EmpresaPrueba",
+            "internal",
+            visibilidad="Private",
+        )
+
+        self.assertEqual(estado_total.cantidad_fragmentos, 3)
+        self.assertEqual(estado_public.cantidad_fragmentos, 1)
+        self.assertEqual(estado_private.cantidad_fragmentos, 2)
+        self.assertIsNotNone(estado_private.ultima_indexacion)
+
+    def test_prueba_parcial_conserva_fecha_de_indexacion_completa(self) -> None:
+        reconstruir_indice(
+            [self._fragmento(1)],
+            perfil="public",
+            configuracion=self.configuracion,
+            proveedor=self.proveedor,
+        )
+        fecha_inicial = consultar_estado_indice(
+            self.configuracion,
+            "EmpresaPrueba",
+            "public",
+        ).ultima_indexacion
+
+        reconstruir_indice(
+            [self._fragmento(1), self._fragmento(2)],
+            perfil="public",
+            configuracion=self.configuracion,
+            proveedor=EmbeddingsSimulados(),
+            limite_fragmentos=2,
+        )
+        fecha_despues_de_prueba = consultar_estado_indice(
+            self.configuracion,
+            "EmpresaPrueba",
+            "public",
+        ).ultima_indexacion
+
+        self.assertIsNotNone(fecha_inicial)
+        self.assertEqual(fecha_despues_de_prueba, fecha_inicial)
+
+    def test_indice_inexistente_devuelve_estado_vacio(self) -> None:
+        estado = consultar_estado_indice(
+            self.configuracion,
+            "EmpresaPrueba",
+            "public",
+        )
+
+        self.assertEqual(estado.cantidad_fragmentos, 0)
+        self.assertIsNone(estado.ultima_indexacion)
 
     def test_permite_reconstruir_indice_public_vacio(self) -> None:
         resultado = reconstruir_indice(

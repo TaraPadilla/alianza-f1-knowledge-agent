@@ -13,6 +13,7 @@ from .documentos import (
 from .indexacion import (
     actualizar_conocimiento,
     obtener_cantidad_fragmentos,
+    obtener_estado_indexacion,
     obtener_fecha_ultima_indexacion,
 )
 
@@ -29,5 +30,6 @@ __all__ = [
     "listar_documentos",
     "listar_empresas",
     "obtener_cantidad_fragmentos",
+    "obtener_estado_indexacion",
     "obtener_fecha_ultima_indexacion",
 ]

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict
+from datetime import datetime
 from html import escape
 from uuid import uuid4
 
@@ -24,8 +25,7 @@ from Agente.app.servicios import (
     guardar_documentos,
     listar_documentos,
     listar_empresas,
-    obtener_cantidad_fragmentos,
-    obtener_fecha_ultima_indexacion,
+    obtener_estado_indexacion,
 )
 
 
@@ -139,6 +139,29 @@ def _aplicar_estilos() -> None:
             font-weight: 750;
             letter-spacing: .13em;
             text-transform: uppercase;
+        }
+        .library-stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 7px;
+            margin: 5px 0 2px;
+        }
+        .library-stat {
+            padding: 7px 9px;
+            border: 1px solid rgba(91, 224, 255, .14);
+            border-radius: 9px;
+            background: rgba(7, 14, 30, .55);
+        }
+        .library-stat strong {
+            display: block;
+            color: var(--cian);
+            font-size: .84rem;
+            line-height: 1;
+        }
+        .library-stat span {
+            color: var(--texto-suave);
+            font-size: .52rem;
+            letter-spacing: .04em;
         }
         .st-key-sidebar_contexto [data-testid="stVerticalBlock"],
         .st-key-sidebar_archivos [data-testid="stVerticalBlock"] {
@@ -418,6 +441,36 @@ def _mostrar_documentos(empresa: str, visibilidad: str) -> None:
                     st.error(str(error))
 
 
+def _mostrar_estadisticas_biblioteca(
+    cantidad_documentos: int,
+    cantidad_fragmentos: int,
+    fecha_indexacion: datetime | None,
+) -> None:
+    """Muestra un resumen compacto de la biblioteca seleccionada."""
+
+    st.markdown(
+        f"""
+        <div class="library-stats">
+            <div class="library-stat">
+                <strong>{cantidad_documentos}</strong><span>Documentos</span>
+            </div>
+            <div class="library-stat">
+                <strong>{cantidad_fragmentos}</strong><span>Fragmentos</span>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    if fecha_indexacion:
+        fecha_local = fecha_indexacion.astimezone()
+        st.caption(
+            "Última indexación completa: "
+            + fecha_local.strftime("%Y-%m-%d %H:%M")
+        )
+    else:
+        st.caption("Última indexación completa: sin registro")
+
+
 def _panel_lateral(
     empresas: list[str],
     empresa_activa: str,
@@ -544,17 +597,17 @@ def _panel_lateral(
             )
             st.caption("Documentación versionable y apta para demostraciones.")
             
-            # Mostrar estadísticas
             cantidad_documentos = len(listar_documentos(empresa, visibilidad))
-            cantidad_fragmentos = obtener_cantidad_fragmentos(empresa, "public")
-            fecha_indexacion = obtener_fecha_ultima_indexacion(empresa, "public")
-            
-            st.caption(f"Documentos: {cantidad_documentos}")
-            st.caption(f"Fragmentos: {cantidad_fragmentos}")
-            if fecha_indexacion:
-                st.caption(f"Última indexación: {fecha_indexacion.strftime('%Y-%m-%d %H:%M')}")
-            else:
-                st.caption("Última indexación: No indexado")
+            estado_indice = obtener_estado_indexacion(
+                empresa,
+                "public",
+                visibilidad="Public",
+            )
+            _mostrar_estadisticas_biblioteca(
+                cantidad_documentos,
+                estado_indice.cantidad_fragmentos,
+                estado_indice.ultima_indexacion,
+            )
             
             with st.expander("＋ Agregar documentos a Public"):
                 formatos = ", ".join(
@@ -607,12 +660,17 @@ def _panel_lateral(
             )
             st.caption("Documentación local protegida y no versionada.")
             
-            # Mostrar fecha de última indexación
-            fecha_indexacion = obtener_fecha_ultima_indexacion(empresa, "internal")
-            if fecha_indexacion:
-                st.caption(f"Última indexación: {fecha_indexacion.strftime('%Y-%m-%d %H:%M')}")
-            else:
-                st.caption("Última indexación: No indexado")
+            cantidad_documentos = len(listar_documentos(empresa, visibilidad))
+            estado_indice = obtener_estado_indexacion(
+                empresa,
+                "internal",
+                visibilidad="Private",
+            )
+            _mostrar_estadisticas_biblioteca(
+                cantidad_documentos,
+                estado_indice.cantidad_fragmentos,
+                estado_indice.ultima_indexacion,
+            )
             
             with st.expander("＋ Agregar documentos a Private"):
                 formatos = ", ".join(
