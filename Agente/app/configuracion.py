@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
 
-from dotenv import dotenv_values
+from dotenv import dotenv_values, set_key
 
 
 VISIBILIDADES_VALIDAS = ("Public", "Private")
@@ -51,6 +51,15 @@ def _leer_archivo_env(ruta_env: Path) -> dict[str, str]:
         for clave, valor in valores.items()
         if isinstance(valor, str)
     }
+
+
+def actualizar_valor_env(ruta_env: Path, clave: str, valor: str) -> None:
+    """Actualiza un valor específico en el archivo .env."""
+
+    if not ruta_env.is_file():
+        raise ValueError(f"El archivo {ruta_env} no existe.")
+
+    set_key(ruta_env, clave, valor)
 
 
 def _obtener_valor(

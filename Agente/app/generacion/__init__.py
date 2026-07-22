@@ -8,8 +8,10 @@ from .proveedor_llm import (
     ErrorLLM,
     GeminiLLM,
     ProveedorLLM,
+    ResultadoPruebaModelo,
     cargar_configuracion_llm,
     crear_proveedor_llm,
+    probar_modelo,
 )
 
 __all__ = [
@@ -20,9 +22,11 @@ __all__ = [
     "FALLBACK_SIN_INFORMACION",
     "GeminiLLM",
     "ProveedorLLM",
+    "ResultadoPruebaModelo",
     "RespuestaGenerada",
     "SalidaLLM",
     "cargar_configuracion_llm",
     "crear_proveedor_llm",
+    "probar_modelo",
     "generar_respuesta",
 ]

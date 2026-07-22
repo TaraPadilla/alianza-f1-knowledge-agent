@@ -13,6 +13,7 @@ from Agente.app.generacion import (
     ErrorLLM,
     GeminiLLM,
     cargar_configuracion_llm,
+    probar_modelo,
 )
 
 
@@ -184,6 +185,46 @@ class ProveedorLLMTests(unittest.TestCase):
                 self.assertIn(esperado, mensaje)
                 self.assertIn(f"HTTP {codigo}", mensaje)
                 self.assertNotIn("detalle-interno", mensaje)
+
+    def test_prueba_modelo_devuelve_el_texto_sin_modificar(self) -> None:
+        cliente = ClienteLLMSimulado(
+            SimpleNamespace(parsed=None, text="\nMODELO_OK\n")
+        )
+
+        resultado = probar_modelo(
+            ConfiguracionLLM("modelo-prueba", "no-utilizada"),
+            cliente=cliente,
+        )
+
+        self.assertTrue(resultado.exito)
+        self.assertEqual(resultado.respuesta, "\nMODELO_OK\n")
+        solicitud = cliente.models.solicitudes[0]
+        self.assertEqual(solicitud["model"], "modelo-prueba")
+        self.assertNotIn("config", solicitud)
+        self.assertNotIn("document", solicitud["contents"].casefold())
+
+    def test_prueba_modelo_muestra_codigo_estado_y_mensaje_de_gemini(self) -> None:
+        from google.genai.errors import APIError
+
+        error = APIError(
+            429,
+            {
+                "error": {
+                    "status": "RESOURCE_EXHAUSTED",
+                    "message": "Cuota de prueba agotada.",
+                }
+            },
+        )
+
+        resultado = probar_modelo(
+            ConfiguracionLLM("modelo-prueba", "no-utilizada"),
+            cliente=ClienteLLMConError(error),
+        )
+
+        self.assertFalse(resultado.exito)
+        self.assertEqual(resultado.codigo, 429)
+        self.assertEqual(resultado.estado, "RESOURCE_EXHAUSTED")
+        self.assertEqual(resultado.respuesta, "Cuota de prueba agotada.")
 
 
 if __name__ == "__main__":

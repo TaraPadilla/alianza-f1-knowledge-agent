@@ -8,13 +8,18 @@ from uuid import uuid4
 
 import streamlit as st
 
-from Agente.app.configuracion import cargar_configuracion
-from Agente.app.generacion import cargar_configuracion_llm
+from Agente.app.configuracion import (
+    RAIZ_AGENTE,
+    actualizar_valor_env,
+    cargar_configuracion,
+)
+from Agente.app.generacion import cargar_configuracion_llm, probar_modelo
 from Agente.app.servicios import (
     EXTENSIONES_CARGADOR,
     EXTENSIONES_SOPORTADAS,
     actualizar_conocimiento,
     crear_servicio_agente,
+    eliminar_documento,
     guardar_documentos,
     listar_documentos,
     listar_empresas,
@@ -352,6 +357,7 @@ def _inicializar_estado() -> None:
     st.session_state.setdefault("feedback", {})
     st.session_state.setdefault("pregunta_pendiente", None)
     st.session_state.setdefault("mostrar_fuentes", True)
+    st.session_state.setdefault("prueba_modelo", None)
     st.session_state.setdefault("contexto_chat", None)
     st.session_state.setdefault(
         "diagnostico",
@@ -381,16 +387,31 @@ def _mostrar_documentos(empresa: str, visibilidad: str) -> None:
         st.caption("Todavía no hay documentos en esta carpeta.")
         return
     for documento in documentos:
-        st.markdown(
-            (
-                '<div class="documento">'
-                f'<div class="documento-nombre">📄 {escape(documento.nombre)}</div>'
-                '<div class="documento-detalle">'
-                f"{_formatear_tamano(documento.tamano_bytes)} · {documento.visibilidad}"
-                "</div></div>"
-            ),
-            unsafe_allow_html=True,
-        )
+        col_doc, col_delete = st.columns([4, 1])
+        with col_doc:
+            st.markdown(
+                (
+                    '<div class="documento">'
+                    f'<div class="documento-nombre">📄 {escape(documento.nombre)}</div>'
+                    '<div class="documento-detalle">'
+                    f"{_formatear_tamano(documento.tamano_bytes)} · {documento.visibilidad}"
+                    "</div></div>"
+                ),
+                unsafe_allow_html=True,
+            )
+        with col_delete:
+            if st.button(
+                "🗑️",
+                key=f"delete_{documento.nombre}_{visibilidad}",
+                help=f"Eliminar {documento.nombre}",
+                use_container_width=True,
+            ):
+                try:
+                    eliminar_documento(documento.nombre, empresa, visibilidad)
+                    st.toast(f"{documento.nombre} eliminado.", icon="✅")
+                    st.rerun()
+                except ValueError as error:
+                    st.error(str(error))
 
 
 def _panel_lateral(
@@ -410,7 +431,16 @@ def _panel_lateral(
             """,
             unsafe_allow_html=True,
         )
-        with st.container(key="sidebar_contexto"):
+        
+        tab_general, tab_public, tab_private = st.tabs(["⚙️ General", "🌐 Public", "🔒 Private"])
+        
+        # Variables para almacenar estado
+        guardar = False
+        procesar = False
+        archivos = None
+        visibilidad_procesar = None
+        
+        with tab_general:
             st.markdown(
                 '<div class="side-section">Contexto del chat</div>',
                 unsafe_allow_html=True,
@@ -430,62 +460,173 @@ def _panel_lateral(
                 format_func=ETIQUETAS_PERFIL.get,
                 help="Internal consulta documentos Public y Private.",
             )
-
-        with st.container(key="sidebar_archivos"):
+            
             st.markdown(
-                '<div class="side-section">Biblioteca documental</div>',
+                '<div class="side-section">Configuración LLM</div>',
                 unsafe_allow_html=True,
             )
-            visibilidad = st.segmented_control(
-                "Destino de los archivos",
-                ("Public", "Private"),
-                default="Public",
-                format_func=lambda valor: (
-                    "🌐 Public" if valor == "Public" else "🔒 Private"
-                ),
-                selection_mode="single",
+            
+            # Obtener valor actual de LLM_MODEL del .env
+            from dotenv import dotenv_values
+            ruta_env = RAIZ_AGENTE / ".env"
+            valores_env = dotenv_values(ruta_env) if ruta_env.exists() else {}
+            llm_model_actual = valores_env.get("LLM_MODEL", "gemini-2.5-flash")
+            
+            llm_model_nuevo = st.text_input(
+                "LLM_MODEL",
+                value=llm_model_actual,
+                help="Modelo de lenguaje a utilizar (ej: gemini-2.5-flash, gemini-2.5-pro)",
             )
-            # Existe un valor predeterminado, pero se conserva este respaldo para
-            # evitar una ruta incompleta si el control llegara a quedar vacío.
-            visibilidad = visibilidad or "Public"
-            descripcion = (
-                "Documentación versionable y apta para demostraciones."
-                if visibilidad == "Public"
-                else "Documentación local protegida y no versionada."
-            )
-            st.caption(descripcion)
+            
+            if st.button(
+                "💾 Guardar Modelo",
+                use_container_width=True,
+                help="Guarda el modelo en el archivo .env",
+            ):
+                try:
+                    actualizar_valor_env(ruta_env, "LLM_MODEL", llm_model_nuevo)
+                    st.toast("Modelo actualizado en .env", icon="✅")
+                    st.rerun()
+                except Exception as error:
+                    st.error(f"Error al guardar: {error}")
+            
+            if st.button(
+                "Probar Modelo",
+                use_container_width=True,
+                help="Comprueba Gemini sin consultar documentos ni índices.",
+            ):
+                with st.spinner("Enviando prueba mínima a Gemini..."):
+                    st.session_state.prueba_modelo = probar_modelo()
 
-            with st.expander(f"＋ Agregar documentos a {visibilidad}"):
+            resultado_prueba = st.session_state.prueba_modelo
+            if resultado_prueba is not None:
+                if resultado_prueba.exito:
+                    st.success(f"Respuesta de {resultado_prueba.modelo}")
+                else:
+                    referencia = " · ".join(
+                        valor
+                        for valor in (
+                            (
+                                f"HTTP {resultado_prueba.codigo}"
+                                if resultado_prueba.codigo
+                                else ""
+                            ),
+                            resultado_prueba.estado or "",
+                        )
+                        if valor
+                    )
+                    st.error(
+                        f"Fallo de {resultado_prueba.modelo}"
+                        + (f" · {referencia}" if referencia else "")
+                    )
+                st.code(resultado_prueba.respuesta, language="text")
+                st.caption("Prueba directa: no utiliza RAG, documentos ni embeddings.")
+        
+        with tab_public:
+            visibilidad = "Public"
+            st.markdown(
+                '<div class="side-section">Documentos Public</div>',
+                unsafe_allow_html=True,
+            )
+            st.caption("Documentación versionable y apta para demostraciones.")
+            
+            with st.expander("＋ Agregar documentos a Public"):
                 formatos = ", ".join(
                     f".{extension}" for extension in EXTENSIONES_SOPORTADAS
                 )
                 st.caption(f"Formatos disponibles: {formatos}.")
-                archivos = st.file_uploader(
+                archivos_public = st.file_uploader(
                     "Seleccionar documentos",
                     type=list(EXTENSIONES_CARGADOR),
                     accept_multiple_files=True,
                     label_visibility="collapsed",
+                    key="uploader_public",
                     help=(
                         "Los PDF deben contener texto seleccionable. "
                         "Para archivos .doc, convierte primero a .docx."
                     ),
                 )
-                guardar = st.button(
-                    f"Guardar en {visibilidad}",
+                if st.button(
+                    "Guardar en Public",
                     type="primary",
                     use_container_width=True,
-                    disabled=not archivos,
-                )
-
-            procesar = st.button(
-                "↻ Sincronizar conocimiento",
+                    disabled=not archivos_public,
+                    key="guardar_public",
+                ):
+                    guardar = True
+                    archivos = archivos_public
+                    visibilidad_procesar = visibilidad
+            
+            if st.button(
+                "↻ Sincronizar conocimiento Public",
                 use_container_width=True,
-                help="Actualiza el índice RAG con los documentos guardados.",
+                help="Actualiza el índice RAG con los documentos Public guardados.",
+                key="procesar_public",
+            ):
+                procesar = True
+                visibilidad_procesar = visibilidad
+            
+            cantidad_documentos = len(listar_documentos(empresa, visibilidad))
+            with st.expander(
+                f"Documentos en Public · {cantidad_documentos}",
+                expanded=True,
+            ):
+                _mostrar_documentos(empresa, visibilidad)
+        
+        with tab_private:
+            visibilidad = "Private"
+            st.markdown(
+                '<div class="side-section">Documentos Private</div>',
+                unsafe_allow_html=True,
             )
+            st.caption("Documentación local protegida y no versionada.")
+            
+            with st.expander("＋ Agregar documentos a Private"):
+                formatos = ", ".join(
+                    f".{extension}" for extension in EXTENSIONES_SOPORTADAS
+                )
+                st.caption(f"Formatos disponibles: {formatos}.")
+                archivos_private = st.file_uploader(
+                    "Seleccionar documentos",
+                    type=list(EXTENSIONES_CARGADOR),
+                    accept_multiple_files=True,
+                    label_visibility="collapsed",
+                    key="uploader_private",
+                    help=(
+                        "Los PDF deben contener texto seleccionable. "
+                        "Para archivos .doc, convierte primero a .docx."
+                    ),
+                )
+                if st.button(
+                    "Guardar en Private",
+                    type="primary",
+                    use_container_width=True,
+                    disabled=not archivos_private,
+                    key="guardar_private",
+                ):
+                    guardar = True
+                    archivos = archivos_private
+                    visibilidad_procesar = visibilidad
+            
+            if st.button(
+                "↻ Sincronizar conocimiento Private",
+                use_container_width=True,
+                help="Actualiza el índice RAG con los documentos Private guardados.",
+                key="procesar_private",
+            ):
+                procesar = True
+                visibilidad_procesar = visibilidad
+            
+            cantidad_documentos = len(listar_documentos(empresa, visibilidad))
+            with st.expander(
+                f"Documentos en Private · {cantidad_documentos}",
+                expanded=True,
+            ):
+                _mostrar_documentos(empresa, visibilidad)
 
-        if guardar:
+        if guardar and archivos and visibilidad_procesar:
             try:
-                guardados = guardar_documentos(archivos, empresa, visibilidad)
+                guardados = guardar_documentos(archivos, empresa, visibilidad_procesar)
                 st.toast(
                     f"{len(guardados)} documento(s) guardado(s).",
                     icon="✅",
@@ -494,7 +635,7 @@ def _panel_lateral(
             except ValueError as error:
                 st.error(str(error))
 
-        if procesar:
+        if procesar and visibilidad_procesar:
             try:
                 with st.status(
                     "Actualizando conocimiento...",
@@ -508,7 +649,7 @@ def _panel_lateral(
 
                     resultados = actualizar_conocimiento(
                         empresa,
-                        visibilidad,
+                        visibilidad_procesar,
                         progreso=progreso,
                     )
                     for resultado in resultados:
@@ -524,13 +665,7 @@ def _panel_lateral(
                     )
             except Exception as error:  # Streamlit debe mostrar el error del pipeline.
                 st.error(f"No fue posible actualizar el índice: {error}")
-
-        cantidad_documentos = len(listar_documentos(empresa, visibilidad))
-        with st.expander(
-            f"Documentos en {visibilidad} · {cantidad_documentos}",
-            expanded=True,
-        ):
-            _mostrar_documentos(empresa, visibilidad)
+        
         return empresa, perfil
 
 

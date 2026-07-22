@@ -132,3 +132,27 @@ def guardar_documentos(
                 ruta_temporal.unlink()
         guardados.append(nombre)
     return tuple(guardados)
+
+
+def eliminar_documento(
+    nombre: str,
+    empresa: str,
+    visibilidad: str,
+    *,
+    raiz_agente: Path | None = None,
+) -> None:
+    """Elimina un documento físicamente de la carpeta especificada."""
+
+    nombre = _validar_nombre_archivo(nombre)
+    configuracion: Configuracion = cargar_configuracion(
+        empresa=empresa,
+        visibilidades=(visibilidad,),
+        raiz_agente=raiz_agente,
+    )
+    destino = configuracion.ruta_empresa / visibilidad
+    ruta_archivo = destino / nombre
+    
+    if not ruta_archivo.exists():
+        raise ValueError(f"El archivo {nombre} no existe en {visibilidad}.")
+    
+    ruta_archivo.unlink()

@@ -41,6 +41,17 @@ class ConfiguracionLLM:
     clave_api: str = field(repr=False)
 
 
+@dataclass(frozen=True)
+class ResultadoPruebaModelo:
+    """Resultado diagnóstico sin incluir credenciales ni documentos."""
+
+    exito: bool
+    modelo: str
+    respuesta: str
+    codigo: int | None = None
+    estado: str | None = None
+
+
 ESQUEMA_RESPUESTA = {
     "type": "object",
     "properties": {
@@ -184,6 +195,45 @@ class GeminiLLM:
         except ValueError as error:
             raise ErrorLLM(str(error)) from error
 
+    def probar(self) -> ResultadoPruebaModelo:
+        """Envía un mensaje mínimo sin RAG y conserva el texto recibido."""
+
+        from google.genai.errors import APIError
+
+        try:
+            respuesta = self.cliente.models.generate_content(
+                model=self.configuracion.modelo,
+                contents="Responde únicamente con el texto: MODELO_OK",
+            )
+        except APIError as error:
+            return ResultadoPruebaModelo(
+                exito=False,
+                modelo=self.configuracion.modelo,
+                respuesta=str(error.message or "Gemini no devolvió un mensaje."),
+                codigo=getattr(error, "code", None),
+                estado=getattr(error, "status", None),
+            )
+        except Exception as error:
+            # En una prueba manual es útil distinguir un fallo de red o del SDK
+            # de una respuesta HTTP producida por Gemini.
+            return ResultadoPruebaModelo(
+                exito=False,
+                modelo=self.configuracion.modelo,
+                respuesta=f"{type(error).__name__}: {error}",
+            )
+
+        texto = getattr(respuesta, "text", None)
+        return ResultadoPruebaModelo(
+            exito=texto is not None,
+            modelo=self.configuracion.modelo,
+            # No se aplica strip: el panel debe mostrar exactamente el texto.
+            respuesta=(
+                texto
+                if texto is not None
+                else "Gemini respondió, pero la respuesta no contiene texto."
+            ),
+        )
+
 
 def _valores_env(ruta_env: Path) -> dict[str, str]:
     valores_archivo = dotenv_values(ruta_env) if ruta_env.is_file() else {}
@@ -228,3 +278,14 @@ def crear_proveedor_llm(
             "Instala las dependencias de Agente/requirements.txt."
         ) from error
     return GeminiLLM(configuracion)
+
+
+def probar_modelo(
+    configuracion: ConfiguracionLLM | None = None,
+    *,
+    cliente: Any | None = None,
+) -> ResultadoPruebaModelo:
+    """Prueba credencial y modelo sin usar recuperación ni documentos."""
+
+    configuracion = configuracion or cargar_configuracion_llm()
+    return GeminiLLM(configuracion, cliente=cliente).probar()
