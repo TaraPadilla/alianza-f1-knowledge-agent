@@ -8,9 +8,9 @@ from uuid import uuid4
 
 import streamlit as st
 
-from app.configuracion import cargar_configuracion
-from app.generacion import cargar_configuracion_llm
-from app.servicios import (
+from Agente.app.configuracion import cargar_configuracion
+from Agente.app.generacion import cargar_configuracion_llm
+from Agente.app.servicios import (
     EXTENSIONES_SOPORTADAS,
     actualizar_conocimiento,
     crear_servicio_agente,
@@ -70,6 +70,12 @@ def _aplicar_estilos() -> None:
             border-radius: 14px;
             padding: 10px 14px;
             min-height: 92px;
+        }
+        [data-testid="stMetricValue"] > div {
+            font-size: 1.12rem;
+            line-height: 1.3;
+            white-space: normal;
+            overflow-wrap: anywhere;
         }
         [data-testid="stChatMessage"] {
             background: white;
