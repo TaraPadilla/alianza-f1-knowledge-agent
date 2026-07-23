@@ -4,7 +4,7 @@
 
 Agente documental corporativo basado en RAG (*Retrieval-Augmented Generation*) para consultar conocimiento empresarial mediante lenguaje natural. La aplicación procesa documentos, genera embeddings, recupera los fragmentos más relevantes y utiliza Gemini para responder exclusivamente con base en las fuentes encontradas.
 
-El proyecto fue desarrollado para el desafío **Alura Agente**, con una arquitectura modular, fácil de probar y preparada para ejecutarse localmente o en una instancia de Oracle Cloud Infrastructure (OCI).
+El proyecto fue desarrollado para el desafío **Alura Agente**, con una arquitectura modular y fácil de probar. Puede ejecutarse localmente con Python o Docker y cuenta con un despliegue realizado en Oracle Cloud Infrastructure (OCI).
 
 ## Objetivo
 
@@ -34,6 +34,9 @@ flowchart LR
     K --> L["Gemini LLM"]
     L --> M["Respuesta, fuentes y fallback"]
 ```
+## Interfaz
+
+![Interfaz del agente](docs/imagenes/interfaz.png)
 
 ### Flujo del RAG
 
@@ -214,23 +217,21 @@ VECTORSTORE_DIR=.vectorstore
 
 No publiques este archivo.
 
-### 5. Crear la configuración operativa
+### 5. Inicializar la configuración operativa
 
-Crea `Agente/config/configuracion_operativa.json`:
+No es necesario crear manualmente `configuracion_operativa.json`. La primera ejecución de la configuración centralizada crea automáticamente:
 
-```json
-{
-  "EMPRESA_ACTIVA": "AlianzaF1",
-  "VISIBILIDADES_PERMITIDAS": [
-    "Public",
-    "Private"
-  ],
-  "LLM_MODEL": "gemini-2.5-flash-lite",
-  "EMBEDDING_MODEL": "models/gemini-embedding-001",
-  "EMBEDDING_DIMENSIONS": 3072,
-  "REINDEXACION_PENDIENTE": false
-}
+```text
+Agente/config/configuracion_operativa.json
 ```
+
+Para una instalación nueva, inicializa la empresa activa mediante la función centralizada:
+
+```bash
+python -c "from Agente.app.configuracion import actualizar_configuracion_operativa; actualizar_configuracion_operativa({'EMPRESA_ACTIVA': 'AlianzaF1'})"
+```
+
+El archivo se completa con la configuración disponible y los valores predeterminados del proyecto. A partir de ese momento se convierte en la fuente persistente de configuración operativa y no debe añadirse al repositorio.
 
 ### 6. Construir los índices iniciales
 
@@ -265,16 +266,31 @@ http://localhost:8501
 
 Docker utiliza Python 3.12, expone el puerto `8501` y verifica el endpoint de salud de Streamlit.
 
-Antes de iniciar, crea `Agente/.env`, `Agente/config/configuracion_operativa.json` y la carpeta privada si no existe:
+Antes de iniciar, crea `Agente/.env` y las carpetas persistentes si no existen:
 
 ```bash
 mkdir -p Agente/AlianzaF1/Private Agente/.vectorstore Agente/config
 ```
 
-Construir e iniciar:
+Construir la imagen:
 
 ```bash
-docker compose up -d --build
+docker compose build
+```
+
+En una instalación nueva, inicializar la empresa mediante la configuración centralizada:
+
+```bash
+docker compose run --rm --no-deps agente \
+  python -c "from Agente.app.configuracion import actualizar_configuracion_operativa; actualizar_configuracion_operativa({'EMPRESA_ACTIVA': 'AlianzaF1'})"
+```
+
+Este comando crea automáticamente `configuracion_operativa.json` dentro del volumen `Agente/config`. Si el volumen ya contiene la configuración persistente, no es necesario repetirlo.
+
+Iniciar la aplicación:
+
+```bash
+docker compose up -d
 ```
 
 Consultar el estado:
@@ -319,14 +335,16 @@ Docker lee este archivo mediante `env_file`; la aplicación no lo modifica.
 
 ### Operación: `Agente/config/configuracion_operativa.json`
 
-| Campo | Descripción |
-|---|---|
-| `EMPRESA_ACTIVA` | Carpeta empresarial que utilizará el agente |
-| `VISIBILIDADES_PERMITIDAS` | Niveles documentales habilitados |
-| `LLM_MODEL` | Modelo utilizado para generar respuestas |
-| `EMBEDDING_MODEL` | Modelo utilizado para documentos y consultas |
-| `EMBEDDING_DIMENSIONS` | Dimensión de los vectores |
-| `REINDEXACION_PENDIENTE` | Bloquea consultas hasta reconstruir los índices |
+El archivo se inicializa automáticamente en el primer uso de la configuración centralizada. Para cada campo toma, en orden, un valor persistente existente, la configuración disponible en el entorno durante la inicialización o el valor predeterminado. Después permanece en `Agente/config` como configuración operativa persistente.
+
+| Campo | Valor predeterminado | Descripción |
+|---|---|---|
+| `EMPRESA_ACTIVA` | Sin empresa implícita | Carpeta empresarial que utilizará el agente |
+| `VISIBILIDADES_PERMITIDAS` | `Public`, `Private` | Niveles documentales habilitados |
+| `LLM_MODEL` | `gemini-2.5-flash` | Modelo utilizado para generar respuestas |
+| `EMBEDDING_MODEL` | `models/gemini-embedding-001` | Modelo utilizado para documentos y consultas |
+| `EMBEDDING_DIMENSIONS` | `3072` | Dimensión de los vectores |
+| `REINDEXACION_PENDIENTE` | `false` | Bloquea consultas hasta reconstruir los índices |
 
 La prioridad de lectura es:
 
@@ -334,7 +352,9 @@ La prioridad de lectura es:
 2. variable de entorno;
 3. valor predeterminado.
 
-La escritura centralizada se realiza de forma atómica mediante un archivo temporal y `os.replace`.
+La escritura centralizada se realiza de forma atómica mediante un archivo temporal y `os.replace`. El valor efectivo puede diferir del predeterminado cuando ya existe una configuración persistente; la interfaz muestra el modelo LLM realmente activo.
+
+El valor predeterminado definido por el código para una configuración nueva es `gemini-2.5-flash`. La configuración operativa presente en el entorno actual utiliza `gemini-2.5-flash-lite`, que tiene prioridad sobre ese valor. En otros entornos, incluido OCI, el modelo efectivo corresponde al valor persistido y puede comprobarse en el panel de diagnóstico.
 
 El modelo LLM puede cambiarse desde la interfaz y se aplica después de limpiar la caché del servicio. Los parámetros de embeddings no se editan desde Streamlit. Si se actualizan mediante `actualizar_configuracion_operativa()`, el sistema marca automáticamente `REINDEXACION_PENDIENTE`. La siguiente sincronización desde la interfaz elimina y reconstruye completamente los índices `public` e `internal`; la marca solo se retira si ambos terminan correctamente.
 
@@ -354,9 +374,9 @@ Los inspectores de recuperación y respuesta realizan llamadas a Gemini. Los tre
 
 ## Despliegue en OCI
 
-La opción propuesta para el MVP es **OCI Compute + Docker**. Una sola instancia es suficiente para ejecutar Streamlit, montar los documentos y persistir ChromaDB sin incorporar servicios administrados adicionales.
+El MVP fue desplegado en **Oracle Cloud Infrastructure** utilizando la arquitectura preparada con **OCI Compute + Docker**. Una sola instancia ejecuta Streamlit y conserva los documentos, la configuración operativa y ChromaDB en volúmenes del host.
 
-### Arquitectura prevista
+### Arquitectura desplegada
 
 ```text
 Usuario
@@ -372,22 +392,23 @@ Contenedor Streamlit
   └── ChromaDB persistente en el host
 ```
 
-### Procedimiento
+### Procedimiento reproducible
 
 1. Crear una instancia Linux en OCI Compute.
 2. Permitir el tráfico TCP al puerto `8501` en la lista de seguridad o NSG correspondiente.
 3. Instalar Git, Docker y Docker Compose en la instancia.
 4. Clonar el repositorio.
 5. Crear `Agente/.env` directamente en la instancia.
-6. Crear la configuración operativa y las carpetas persistentes.
+6. Crear las carpetas persistentes del host.
 7. Cargar los documentos privados por un medio seguro, sin añadirlos a Git.
-8. Iniciar la aplicación:
+8. Construir la imagen e inicializar la configuración operativa mediante la función centralizada.
+9. Iniciar la aplicación:
 
 ```bash
 docker compose up -d --build
 ```
 
-9. Verificar el contenedor:
+10. Verificar el contenedor:
 
 ```bash
 docker compose ps
@@ -398,16 +419,29 @@ Para el MVP no se requieren Object Storage, Vault, OKE, Load Balancer ni una bas
 
 ## Registro de ejecución en la nube
 
-**Estado actual:** el repositorio está preparado para ejecutarse con Docker, pero todavía no contiene evidencia de un despliegue realizado en OCI.
+**Estado actual:** despliegue realizado en Oracle Cloud Infrastructure.
 
-No se publica una URL ni una captura porque aún no han sido generadas. Después del despliegue deben registrarse aquí:
+| Dato | Registro |
+|---|---|
+| Servicio de OCI | OCI Compute |
+| Fecha del despliegue | **[COMPLETAR FECHA DEL DESPLIEGUE]** |
+| Región | **[COMPLETAR REGIÓN DE OCI]** |
+| URL pública | **[COMPLETAR URL PÚBLICA]** |
+| Estado del endpoint de salud | **[INSERTAR RESULTADO DEL ENDPOINT DE SALUD]** |
 
-- servicio de OCI utilizado;
-- fecha de despliegue;
-- región;
-- URL pública real;
-- resultado del endpoint de salud;
-- captura de la aplicación ejecutándose en OCI.
+### Evidencias
+
+**Aplicación ejecutándose en OCI**
+
+**[INSERTAR CAPTURA DE LA APLICACIÓN EN OCI]**
+
+**Estado de los contenedores**
+
+**[INSERTAR CAPTURA DE docker compose ps]**
+
+**Registro de ejecución**
+
+**[INSERTAR CAPTURA O FRAGMENTO DE LOS LOGS DEL CONTENEDOR]**
 
 ## Ejecución de pruebas
 
@@ -437,7 +471,6 @@ La suite actual contiene **118 pruebas** sobre configuración, descubrimiento, e
 - El feedback solo permanece en `st.session_state`.
 - No incluye autenticación, roles ni control de acceso para un despliegue público.
 - La reconstrucción por cambio de embeddings no conserva el índice anterior ni es transaccional.
-- El despliegue en OCI todavía no se ha ejecutado.
 
 ## Mejoras futuras
 
