@@ -21,20 +21,37 @@ Facilitar el acceso al conocimiento de una empresa mediante un asistente que:
 ## Arquitectura general
 
 ```mermaid
-flowchart LR
-    A["Documentos<br/>Public / Private"] --> B["Descubrimiento"]
-    B --> C["Extractores por formato"]
-    C --> D["Markdown interno normalizado"]
-    D --> E["Fragmentación y metadatos"]
-    E --> F["Embeddings con Gemini"]
-    F --> G["ChromaDB<br/>public / internal"]
-    H["Pregunta"] --> I["Embedding de consulta"]
-    I --> G
-    G --> J["Recuperación semántica"]
-    J --> K["Ensamblaje del contexto"]
-    K --> L["Gemini LLM"]
-    L --> M["Respuesta, fuentes y fallback"]
+flowchart TB
+    subgraph P["1. Procesamiento documental"]
+        direction LR
+        A["Documentos<br/>Public / Private"] --> B["Descubrimiento"]
+        B --> C["Extractor según formato"]
+    end
+
+    subgraph I["2. Preparación e indexación"]
+        direction LR
+        D["Markdown interno"] --> E["Fragmentación<br/>y metadatos"]
+        E --> F["Embeddings<br/>Gemini"]
+        F --> G["ChromaDB<br/>public / internal"]
+    end
+
+    subgraph R["3. Recuperación"]
+        direction LR
+        H["Pregunta"] --> J["Embedding<br/>de consulta"]
+        J --> K["Búsqueda semántica<br/>y filtros"]
+    end
+
+    subgraph Q["4. Generación de respuesta"]
+        direction LR
+        L["Contexto recuperado"] --> M["Gemini LLM"]
+        M --> N["Respuesta<br/>fuentes y fallback"]
+    end
+
+    C --> D
+    G --> K
+    K --> L
 ```
+
 ## Interfaz
 
 ![Interfaz del agente](./Imagenes/interfaz.png)
