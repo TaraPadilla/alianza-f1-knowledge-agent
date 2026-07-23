@@ -11,7 +11,10 @@ from Agente.app.generacion.modelos import RespuestaGenerada
 from Agente.app.procesamiento.embeddings import ConfiguracionEmbeddings
 from Agente.app.procesamiento.indice_vectorial import ResultadoIndexacion
 from Agente.app.recuperacion import FragmentoRecuperado
-from Agente.app.servicios.agente import ServicioAgente
+from Agente.app.servicios.agente import (
+    ErrorReindexacionPendiente,
+    ServicioAgente,
+)
 from Agente.app.servicios.documentos import (
     EXTENSIONES_SOPORTADAS,
     guardar_documentos,
@@ -154,6 +157,30 @@ class ServiciosInterfazTests(unittest.TestCase):
         self.assertEqual(recuperar.call_args.kwargs["top_k"], 3)
         generar.assert_called_once()
 
+    def test_servicio_bloquea_consulta_si_falta_reindexar(self) -> None:
+        servicio = ServicioAgente(
+            empresa="EmpresaUno",
+            configuracion_embeddings=ConfiguracionEmbeddings(
+                modelo="embedding-nuevo",
+                dimensiones=3,
+                directorio_vectorial=self.raiz / ".vectorstore",
+                clave_api="no-utilizada",
+            ),
+            proveedor_embeddings=Mock(),
+            configuracion_llm=ConfiguracionLLM(
+                modelo="llm-falso",
+                clave_api="no-utilizada",
+            ),
+            proveedor_llm=Mock(),
+            reindexacion_pendiente=True,
+        )
+
+        with self.assertRaisesRegex(
+            ErrorReindexacionPendiente,
+            "Reindexa el conocimiento",
+        ):
+            servicio.consultar("Pregunta", "public")
+
     @patch("Agente.app.servicios.indexacion.crear_proveedor_embeddings")
     @patch("Agente.app.servicios.indexacion.cargar_configuracion_embeddings")
     @patch("Agente.app.servicios.indexacion.reconstruir_indice")
@@ -220,6 +247,128 @@ class ServiciosInterfazTests(unittest.TestCase):
         resultados = actualizar_conocimiento("EmpresaUno", "Private")
 
         self.assertEqual([resultado.perfil for resultado in resultados], ["internal"])
+
+    def test_cambio_embeddings_reindexa_ambos_perfiles_y_confirma(self) -> None:
+        resultados_simulados = (
+            ResultadoIndexacion(
+                "public", "EmpresaUno", "uno_public", self.raiz,
+                0, 0, 0, 0, 0, True,
+            ),
+            ResultadoIndexacion(
+                "internal", "EmpresaUno", "uno_internal", self.raiz,
+                0, 0, 0, 0, 0, True,
+            ),
+        )
+        with (
+            patch(
+                "Agente.app.servicios.indexacion.cargar_configuracion_operativa",
+                return_value=SimpleNamespace(reindexacion_pendiente=True),
+            ),
+            patch(
+                "Agente.app.servicios.indexacion.confirmar_reindexacion_operativa"
+            ) as confirmar,
+            patch(
+                "Agente.app.servicios.indexacion.cargar_configuracion",
+                return_value=SimpleNamespace(),
+            ),
+            patch(
+                "Agente.app.servicios.indexacion.descubrir_documentos",
+                return_value=[],
+            ),
+            patch(
+                "Agente.app.servicios.indexacion.extraer_documentos",
+                return_value=[],
+            ),
+            patch(
+                "Agente.app.servicios.indexacion.fragmentar_documentos",
+                return_value=[],
+            ),
+            patch(
+                "Agente.app.servicios.indexacion.cargar_configuracion_embeddings",
+                return_value=SimpleNamespace(),
+            ),
+            patch(
+                "Agente.app.servicios.indexacion.crear_proveedor_embeddings",
+                return_value=Mock(),
+            ),
+            patch(
+                "Agente.app.servicios.indexacion.reconstruir_indice",
+                side_effect=resultados_simulados,
+            ) as reconstruir,
+        ):
+            resultados = actualizar_conocimiento("EmpresaUno", "Private")
+
+        self.assertEqual(
+            [llamada.args[1] for llamada in reconstruir.call_args_list],
+            ["public", "internal"],
+        )
+        self.assertTrue(
+            all(
+                llamada.kwargs["reiniciar_coleccion"]
+                for llamada in reconstruir.call_args_list
+            )
+        )
+        self.assertEqual(len(resultados), 2)
+        confirmar.assert_called_once_with()
+
+    def test_fallo_en_reindexacion_no_confirma_la_configuracion(self) -> None:
+        public_reconstruido = ResultadoIndexacion(
+            "public",
+            "EmpresaUno",
+            "uno_public",
+            self.raiz,
+            0,
+            0,
+            0,
+            0,
+            0,
+            True,
+        )
+        with (
+            patch(
+                "Agente.app.servicios.indexacion.cargar_configuracion_operativa",
+                return_value=SimpleNamespace(reindexacion_pendiente=True),
+            ),
+            patch(
+                "Agente.app.servicios.indexacion.confirmar_reindexacion_operativa"
+            ) as confirmar,
+            patch(
+                "Agente.app.servicios.indexacion.cargar_configuracion",
+                return_value=SimpleNamespace(),
+            ),
+            patch(
+                "Agente.app.servicios.indexacion.descubrir_documentos",
+                return_value=[],
+            ),
+            patch(
+                "Agente.app.servicios.indexacion.extraer_documentos",
+                return_value=[],
+            ),
+            patch(
+                "Agente.app.servicios.indexacion.fragmentar_documentos",
+                return_value=[],
+            ),
+            patch(
+                "Agente.app.servicios.indexacion.cargar_configuracion_embeddings",
+                return_value=SimpleNamespace(),
+            ),
+            patch(
+                "Agente.app.servicios.indexacion.crear_proveedor_embeddings",
+                return_value=Mock(),
+            ),
+            patch(
+                "Agente.app.servicios.indexacion.reconstruir_indice",
+                side_effect=(
+                    public_reconstruido,
+                    RuntimeError("Fallo simulado"),
+                ),
+            ) as reconstruir,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "Fallo simulado"):
+                actualizar_conocimiento("EmpresaUno", "Public")
+
+        self.assertEqual(reconstruir.call_count, 2)
+        confirmar.assert_not_called()
 
 
 if __name__ == "__main__":

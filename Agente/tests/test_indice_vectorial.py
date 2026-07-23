@@ -10,6 +10,7 @@ from Agente.app.procesamiento.embeddings import ConfiguracionEmbeddings
 from Agente.app.procesamiento.indice_vectorial import (
     ErrorIndiceVectorial,
     consultar_estado_indice,
+    directorio_indice,
     reconstruir_indice,
 )
 from Agente.app.procesamiento.modelos import FragmentoMarkdown
@@ -269,6 +270,48 @@ class IndiceVectorialTests(unittest.TestCase):
         self.assertNotEqual(publico.coleccion, interno.coleccion)
         self.assertEqual(len(self._leer_resultado(publico)["ids"]), 1)
         self.assertEqual(len(self._leer_resultado(interno)["ids"]), 2)
+
+    def test_los_directorios_de_perfil_son_fijos(self) -> None:
+        self.assertEqual(
+            directorio_indice(
+                self.configuracion,
+                "EmpresaPrueba",
+                "public",
+            ).name,
+            "public",
+        )
+        self.assertEqual(
+            directorio_indice(
+                self.configuracion,
+                "EmpresaPrueba",
+                "internal",
+            ).name,
+            "internal",
+        )
+
+    def test_reinicio_elimina_y_reconstruye_la_coleccion_completa(self) -> None:
+        iniciales = [self._fragmento(1), self._fragmento(2)]
+        reconstruir_indice(
+            iniciales,
+            perfil="public",
+            configuracion=self.configuracion,
+            proveedor=self.proveedor,
+        )
+
+        proveedor_nuevo = EmbeddingsSimulados()
+        resultado = reconstruir_indice(
+            [self._fragmento(3)],
+            perfil="public",
+            configuracion=self.configuracion,
+            proveedor=proveedor_nuevo,
+            reiniciar_coleccion=True,
+        )
+        datos = self._leer_resultado(resultado)
+
+        self.assertEqual(datos["ids"], [self._fragmento(3).referencia_fragmento])
+        self.assertEqual(resultado.nuevos, 1)
+        self.assertEqual(resultado.sin_cambios, 0)
+        self.assertEqual(proveedor_nuevo.tamanos_lote, [1])
 
     def test_consulta_fragmentos_filtrados_por_visibilidad(self) -> None:
         reconstruir_indice(

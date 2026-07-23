@@ -6,7 +6,14 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from Agente.app.configuracion import ErrorConfiguracion, cargar_configuracion
+from Agente.app.configuracion import (
+    ErrorConfiguracion,
+    actualizar_configuracion_operativa,
+    cargar_configuracion,
+    cargar_configuracion_operativa,
+    confirmar_reindexacion_operativa,
+    ruta_configuracion_operativa,
+)
 
 
 class ConfiguracionTests(unittest.TestCase):
@@ -120,6 +127,95 @@ class ConfiguracionTests(unittest.TestCase):
                 visibilidades=["Confidencial"],
                 raiz_agente=self.raiz,
             )
+
+    def test_inicializa_archivo_operativo_desde_env_actual(self) -> None:
+        archivo_env = self.raiz / ".env.prueba"
+        archivo_env.write_text(
+            "EMPRESA_ACTIVA=EmpresaPrueba\n"
+            "VISIBILIDADES_PERMITIDAS=Public\n"
+            "LLM_MODEL=modelo-inicial\n"
+            "EMBEDDING_MODEL=embedding-inicial\n"
+            "EMBEDDING_DIMENSIONS=16\n",
+            encoding="utf-8",
+        )
+
+        with patch.dict(os.environ, {}, clear=True):
+            operativa = cargar_configuracion_operativa(
+                raiz_agente=self.raiz,
+                ruta_env=archivo_env,
+            )
+
+        self.assertEqual(operativa.empresa_activa, "EmpresaPrueba")
+        self.assertEqual(operativa.visibilidades_permitidas, ("Public",))
+        self.assertEqual(operativa.llm_model, "modelo-inicial")
+        self.assertEqual(operativa.embedding_model, "embedding-inicial")
+        self.assertEqual(operativa.embedding_dimensiones, 16)
+        self.assertTrue(ruta_configuracion_operativa(self.raiz).is_file())
+
+    def test_configuracion_persistente_tiene_prioridad_sobre_entorno(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "EMPRESA_ACTIVA": "EmpresaPrueba",
+                "LLM_MODEL": "modelo-entorno-inicial",
+            },
+            clear=True,
+        ):
+            cargar_configuracion_operativa(raiz_agente=self.raiz)
+            actualizar_configuracion_operativa(
+                {"LLM_MODEL": "modelo-persistente"},
+                raiz_agente=self.raiz,
+            )
+
+        with patch.dict(
+            os.environ,
+            {"LLM_MODEL": "modelo-entorno-nuevo"},
+            clear=True,
+        ):
+            operativa = cargar_configuracion_operativa(
+                raiz_agente=self.raiz
+            )
+
+        self.assertEqual(operativa.llm_model, "modelo-persistente")
+
+    def test_cambio_llm_no_marca_reindexacion(self) -> None:
+        operativa = actualizar_configuracion_operativa(
+            {"LLM_MODEL": "modelo-nuevo"},
+            raiz_agente=self.raiz,
+        )
+
+        self.assertEqual(operativa.llm_model, "modelo-nuevo")
+        self.assertFalse(operativa.reindexacion_pendiente)
+
+    def test_cambio_embeddings_marca_reindexacion(self) -> None:
+        operativa = actualizar_configuracion_operativa(
+            {
+                "EMBEDDING_MODEL": "embedding-nuevo",
+                "EMBEDDING_DIMENSIONS": 128,
+            },
+            raiz_agente=self.raiz,
+        )
+
+        self.assertTrue(operativa.reindexacion_pendiente)
+
+        confirmada = confirmar_reindexacion_operativa(
+            raiz_agente=self.raiz
+        )
+        self.assertFalse(confirmada.reindexacion_pendiente)
+
+    def test_escritura_operativa_usa_reemplazo_atomico(self) -> None:
+        with patch(
+            "Agente.app.configuracion.os.replace",
+            wraps=os.replace,
+        ) as reemplazar:
+            actualizar_configuracion_operativa(
+                {"LLM_MODEL": "modelo-atomico"},
+                raiz_agente=self.raiz,
+            )
+
+        self.assertGreaterEqual(reemplazar.call_count, 1)
+        temporales = list((self.raiz / "config").glob("*.tmp"))
+        self.assertEqual(temporales, [])
 
 
 if __name__ == "__main__":

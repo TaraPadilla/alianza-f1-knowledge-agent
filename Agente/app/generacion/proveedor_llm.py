@@ -3,14 +3,16 @@
 from __future__ import annotations
 
 import json
-import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol
 
-from dotenv import dotenv_values
-
-from ..configuracion import RAIZ_AGENTE
+from ..configuracion import (
+    RAIZ_AGENTE,
+    ErrorConfiguracion,
+    cargar_configuracion_operativa,
+    obtener_valor_infraestructura,
+)
 from .modelos import SalidaLLM
 
 
@@ -235,32 +237,33 @@ class GeminiLLM:
         )
 
 
-def _valores_env(ruta_env: Path) -> dict[str, str]:
-    valores_archivo = dotenv_values(ruta_env) if ruta_env.is_file() else {}
-    return {
-        clave: os.getenv(clave) or str(valores_archivo.get(clave) or "")
-        for clave in ("GEMINI_API_KEY", "LLM_MODEL")
-    }
-
-
 def cargar_configuracion_llm(
     *,
     raiz_agente: Path | None = None,
     ruta_env: Path | None = None,
 ) -> ConfiguracionLLM:
-    """Lee los nombres existentes del .env sin exponer la clave de Gemini."""
+    """Combina la credencial de infraestructura y el modelo operativo."""
 
     raiz = (raiz_agente or RAIZ_AGENTE).resolve()
-    archivo_env = ruta_env or (raiz / ".env")
-    valores = _valores_env(archivo_env)
-    faltantes = [clave for clave, valor in valores.items() if not valor.strip()]
-    if faltantes:
+    try:
+        operativa = cargar_configuracion_operativa(
+            raiz_agente=raiz,
+            ruta_env=ruta_env,
+        )
+    except ErrorConfiguracion as error:
+        raise ErrorConfiguracionLLM(str(error)) from error
+    clave_api = obtener_valor_infraestructura(
+        "GEMINI_API_KEY",
+        raiz_agente=raiz,
+        ruta_env=ruta_env,
+    )
+    if not clave_api:
         raise ErrorConfiguracionLLM(
-            "Faltan variables para el LLM: " + ", ".join(faltantes) + "."
+            "Faltan variables para el LLM: GEMINI_API_KEY."
         )
     return ConfiguracionLLM(
-        modelo=valores["LLM_MODEL"].strip(),
-        clave_api=valores["GEMINI_API_KEY"].strip(),
+        modelo=operativa.llm_model,
+        clave_api=clave_api,
     )
 
 

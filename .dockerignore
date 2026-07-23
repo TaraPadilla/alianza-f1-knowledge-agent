@@ -21,6 +21,7 @@
 # Índices locales y conocimiento montado desde el host
 **/.vectorstore
 **/.vectorstore/**
+Agente/config/configuracion_operativa.json
 Agente/*/Public
 Agente/*/Public/**
 Agente/*/Private

@@ -5,6 +5,7 @@ Cursos/Curso-01/workana_scraper_login.py
 # Configuración local del agente
 Agente/.env
 Agente/.venv/
+Agente/config/configuracion_operativa.json
 
 # Índices generados localmente; pueden contener conocimiento privado.
 Agente/.vectorstore/

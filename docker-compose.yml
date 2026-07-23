@@ -10,6 +10,9 @@ services:
     ports:
       - "8501:8501"
     volumes:
+      # La configuración operativa se persiste como archivo dentro de esta
+      # carpeta; el .env solo se utiliza mediante env_file.
+      - ./Agente/config:/app/Agente/config
       # Los documentos permanecen en el host y conservan todas las funciones
       # actuales de carga, eliminación e indexación de la interfaz.
       - ./Agente/AlianzaF1/Public:/app/Agente/AlianzaF1/Public

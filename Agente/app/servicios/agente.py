@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from time import perf_counter
 
-from ..configuracion import cargar_configuracion
+from ..configuracion import cargar_configuracion, cargar_configuracion_operativa
 from ..generacion import (
     ConfiguracionLLM,
     ProveedorLLM,
@@ -22,6 +22,10 @@ from ..procesamiento.embeddings import (
 )
 from ..procesamiento.indice_vectorial import PerfilIndice
 from ..recuperacion import FragmentoRecuperado, recuperar_fragmentos
+
+
+class ErrorReindexacionPendiente(RuntimeError):
+    """Impide consultar índices creados con otra configuración de embeddings."""
 
 
 @dataclass(frozen=True)
@@ -46,12 +50,14 @@ class ServicioAgente:
         proveedor_embeddings: ProveedorEmbeddings,
         configuracion_llm: ConfiguracionLLM,
         proveedor_llm: ProveedorLLM,
+        reindexacion_pendiente: bool = False,
     ) -> None:
         self.empresa = empresa
         self.configuracion_embeddings = configuracion_embeddings
         self.proveedor_embeddings = proveedor_embeddings
         self.configuracion_llm = configuracion_llm
         self.proveedor_llm = proveedor_llm
+        self.reindexacion_pendiente = reindexacion_pendiente
 
     def consultar(
         self,
@@ -61,6 +67,12 @@ class ServicioAgente:
         top_k: int = 5,
     ) -> ResultadoConsultaRAG:
         """Mide el flujo completo desde la pregunta hasta la respuesta final."""
+
+        if self.reindexacion_pendiente:
+            raise ErrorReindexacionPendiente(
+                "La configuración de embeddings cambió. Reindexa el "
+                "conocimiento antes de realizar consultas."
+            )
 
         inicio = perf_counter()
         fragmentos = recuperar_fragmentos(
@@ -93,10 +105,8 @@ def crear_servicio_agente(
 ) -> ServicioAgente:
     """Construye el servicio usando las variables existentes del proyecto."""
 
-    configuracion_proyecto = cargar_configuracion(
-        empresa=empresa,
-        visibilidades=("Public", "Private"),
-    )
+    operativa = cargar_configuracion_operativa()
+    configuracion_proyecto = cargar_configuracion(empresa=empresa)
     configuracion_embeddings = cargar_configuracion_embeddings()
     configuracion_llm = cargar_configuracion_llm()
     return ServicioAgente(
@@ -109,4 +119,5 @@ def crear_servicio_agente(
         ),
         configuracion_llm=configuracion_llm,
         proveedor_llm=crear_proveedor_llm(configuracion_llm),
+        reindexacion_pendiente=operativa.reindexacion_pendiente,
     )

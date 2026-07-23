@@ -2,16 +2,18 @@
 
 from __future__ import annotations
 
-import os
 import re
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol
 
-from dotenv import dotenv_values
-
-from ..configuracion import RAIZ_AGENTE
+from ..configuracion import (
+    RAIZ_AGENTE,
+    ErrorConfiguracion,
+    cargar_configuracion_operativa,
+    obtener_valor_infraestructura,
+)
 
 
 class ProveedorEmbeddings(Protocol):
@@ -194,51 +196,40 @@ class GeminiEmbeddings:
         return list(embeddings[0].values or [])
 
 
-def _valores_env(ruta_env: Path) -> dict[str, str]:
-    """Combina el archivo .env con el entorno sin exponer valores sensibles."""
-
-    valores_archivo = dotenv_values(ruta_env) if ruta_env.is_file() else {}
-    claves = (
-        "GEMINI_API_KEY",
-        "EMBEDDING_MODEL",
-        "EMBEDDING_DIMENSIONS",
-        "VECTORSTORE_DIR",
-    )
-    return {
-        clave: os.getenv(clave) or str(valores_archivo.get(clave) or "")
-        for clave in claves
-    }
-
-
 def cargar_configuracion_embeddings(
     *,
     raiz_agente: Path | None = None,
     ruta_env: Path | None = None,
 ) -> ConfiguracionEmbeddings:
-    """Carga las variables existentes y valida que el índice sea portable."""
+    """Combina infraestructura del .env con configuración operativa."""
 
     raiz = (raiz_agente or RAIZ_AGENTE).resolve()
-    archivo_env = ruta_env or (raiz / ".env")
-    valores = _valores_env(archivo_env)
-
-    faltantes = [clave for clave, valor in valores.items() if not valor.strip()]
+    try:
+        operativa = cargar_configuracion_operativa(
+            raiz_agente=raiz,
+            ruta_env=ruta_env,
+        )
+    except ErrorConfiguracion as error:
+        raise ErrorConfiguracionEmbeddings(str(error)) from error
+    valores_infraestructura = {
+        clave: obtener_valor_infraestructura(
+            clave,
+            raiz_agente=raiz,
+            ruta_env=ruta_env,
+        )
+        for clave in ("GEMINI_API_KEY", "VECTORSTORE_DIR")
+    }
+    faltantes = [
+        clave
+        for clave, valor in valores_infraestructura.items()
+        if not valor
+    ]
     if faltantes:
         raise ErrorConfiguracionEmbeddings(
             "Faltan variables para embeddings: " + ", ".join(faltantes) + "."
         )
 
-    try:
-        dimensiones = int(valores["EMBEDDING_DIMENSIONS"])
-    except ValueError as error:
-        raise ErrorConfiguracionEmbeddings(
-            "EMBEDDING_DIMENSIONS debe ser un número entero."
-        ) from error
-    if dimensiones <= 0:
-        raise ErrorConfiguracionEmbeddings(
-            "EMBEDDING_DIMENSIONS debe ser mayor que cero."
-        )
-
-    ruta_configurada = Path(valores["VECTORSTORE_DIR"])
+    ruta_configurada = Path(valores_infraestructura["VECTORSTORE_DIR"])
     if ruta_configurada.is_absolute():
         raise ErrorConfiguracionEmbeddings(
             "VECTORSTORE_DIR debe ser una ruta relativa dentro de Agente."
@@ -251,10 +242,10 @@ def cargar_configuracion_embeddings(
         )
 
     return ConfiguracionEmbeddings(
-        modelo=valores["EMBEDDING_MODEL"].strip(),
-        dimensiones=dimensiones,
+        modelo=operativa.embedding_model,
+        dimensiones=operativa.embedding_dimensiones,
         directorio_vectorial=directorio_vectorial,
-        clave_api=valores["GEMINI_API_KEY"].strip(),
+        clave_api=valores_infraestructura["GEMINI_API_KEY"],
     )
 
 
@@ -264,7 +255,7 @@ def crear_proveedor_embeddings(
     max_reintentos_429: int = 2,
     espera_maxima: float = 45.0,
 ) -> ProveedorEmbeddings:
-    """Crea Gemini usando exclusivamente los valores definidos en el .env."""
+    """Crea Gemini usando la configuración centralizada del proyecto."""
 
     if configuracion is None:
         configuracion = cargar_configuracion_embeddings()

@@ -10,9 +10,9 @@ from uuid import uuid4
 import streamlit as st
 
 from Agente.app.configuracion import (
-    RAIZ_AGENTE,
-    actualizar_valor_env,
+    actualizar_configuracion_operativa,
     cargar_configuracion,
+    cargar_configuracion_operativa,
 )
 from Agente.app.generacion import cargar_configuracion_llm, probar_modelo
 from Agente.app.procesamiento.embeddings import cargar_configuracion_embeddings
@@ -523,11 +523,8 @@ def _panel_lateral(
                 unsafe_allow_html=True,
             )
             
-            # Obtener valor actual de LLM_MODEL del .env
-            from dotenv import dotenv_values
-            ruta_env = RAIZ_AGENTE / ".env"
-            valores_env = dotenv_values(ruta_env) if ruta_env.exists() else {}
-            llm_model_actual = valores_env.get("LLM_MODEL", "gemini-2.5-flash")
+            operativa = cargar_configuracion_operativa()
+            llm_model_actual = operativa.llm_model
             
             # Guardar el modelo actual en session_state si no existe
             if st.session_state.llm_model_actual is None:
@@ -544,18 +541,26 @@ def _panel_lateral(
             with col_guardar:
                 if st.button(
                     "💾",
-                    help="Guarda el modelo en el archivo .env",
+                    help="Guarda el modelo en la configuración operativa",
                     key="guardar_llm_model",
                 ):
                     try:
-                        actualizar_valor_env(ruta_env, "LLM_MODEL", llm_model_nuevo)
+                        actualizar_configuracion_operativa(
+                            {"LLM_MODEL": llm_model_nuevo}
+                        )
                         st.session_state.llm_model_actual = llm_model_nuevo
                         # Invalidar el cache del servicio para que use el nuevo modelo
                         st.cache_resource.clear()
-                        st.toast("Modelo actualizado en .env", icon="✅")
+                        st.toast("Modelo LLM actualizado", icon="✅")
                         st.rerun()
                     except Exception as error:
                         st.error(f"Error al guardar: {error}")
+
+            if operativa.reindexacion_pendiente:
+                st.warning(
+                    "Los embeddings cambiaron. Sincroniza Public o Private; "
+                    "se reconstruirán ambos índices antes de habilitar consultas."
+                )
             
             if st.button(
                 "Probar Modelo",
@@ -754,6 +759,9 @@ def _panel_lateral(
                         state="complete",
                         expanded=False,
                     )
+                    # La reindexación puede activar una nueva versión de
+                    # embeddings; el siguiente mensaje debe crear otro servicio.
+                    st.cache_resource.clear()
             except Exception as error:  # Streamlit debe mostrar el error del pipeline.
                 st.error(f"No fue posible actualizar el índice: {error}")
         

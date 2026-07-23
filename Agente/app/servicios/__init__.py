@@ -1,6 +1,11 @@
 """Servicios que conectan el pipeline con interfaces y scripts."""
 
-from .agente import ResultadoConsultaRAG, ServicioAgente, crear_servicio_agente
+from .agente import (
+    ErrorReindexacionPendiente,
+    ResultadoConsultaRAG,
+    ServicioAgente,
+    crear_servicio_agente,
+)
 from .documentos import (
     EXTENSIONES_CARGADOR,
     EXTENSIONES_SOPORTADAS,
@@ -21,6 +26,7 @@ __all__ = [
     "EXTENSIONES_SOPORTADAS",
     "EXTENSIONES_CARGADOR",
     "DocumentoInterfaz",
+    "ErrorReindexacionPendiente",
     "ResultadoConsultaRAG",
     "ServicioAgente",
     "actualizar_conocimiento",

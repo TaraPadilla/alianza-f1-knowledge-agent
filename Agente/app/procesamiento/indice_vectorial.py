@@ -66,7 +66,6 @@ def directorio_indice(
 ) -> Path:
     """Devuelve la ubicación portable de un perfil sin crearla."""
 
-    # Validar el perfil aquí evita construir rutas para nombres inesperados.
     nombre_coleccion(empresa, perfil)
     return configuracion.directorio_vectorial / empresa / perfil
 
@@ -237,6 +236,7 @@ def reconstruir_indice(
     limite_fragmentos: int | None = None,
     tamano_lote: int = 25,
     progreso: ProgresoIndexacion | None = None,
+    reiniciar_coleccion: bool = False,
 ) -> ResultadoIndexacion:
     """Actualiza un índice por lotes y permite reanudar tras un fallo.
 
@@ -258,6 +258,16 @@ def reconstruir_indice(
 
     cliente = _abrir_cliente(directorio)
     try:
+        if reiniciar_coleccion:
+            nombres = {
+                item.name if hasattr(item, "name") else str(item)
+                for item in cliente.list_collections()
+            }
+            if coleccion in nombres:
+                # Un cambio de modelo o dimensión requiere eliminar todos los
+                # vectores anteriores antes de crear nuevamente la colección.
+                cliente.delete_collection(name=coleccion)
+
         almacen = cliente.get_or_create_collection(
             name=coleccion,
             configuration={"hnsw": {"space": "cosine"}},

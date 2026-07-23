@@ -1,26 +1,55 @@
-"""Configuración portable para seleccionar empresa y fuentes de conocimiento."""
+"""Configuración centralizada de infraestructura y operación del agente."""
 
 from __future__ import annotations
 
+import json
 import os
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Mapping
 
-from dotenv import dotenv_values, set_key
+from dotenv import dotenv_values
 
 
 VISIBILIDADES_VALIDAS = ("Public", "Private")
 RAIZ_AGENTE = Path(__file__).resolve().parents[1]
+NOMBRE_CONFIGURACION_OPERATIVA = "configuracion_operativa.json"
+CLAVES_OPERATIVAS = (
+    "EMPRESA_ACTIVA",
+    "VISIBILIDADES_PERMITIDAS",
+    "LLM_MODEL",
+    "EMBEDDING_MODEL",
+    "EMBEDDING_DIMENSIONS",
+)
+VALORES_PREDETERMINADOS: dict[str, object] = {
+    "EMPRESA_ACTIVA": "",
+    "VISIBILIDADES_PERMITIDAS": ("Public", "Private"),
+    "LLM_MODEL": "gemini-2.5-flash",
+    "EMBEDDING_MODEL": "models/gemini-embedding-001",
+    "EMBEDDING_DIMENSIONS": 3072,
+}
 
 
 class ErrorConfiguracion(ValueError):
-    """Indica que la empresa o sus niveles de visibilidad no son válidos."""
+    """Indica que la configuración del agente no es válida."""
+
+
+@dataclass(frozen=True)
+class ConfiguracionOperativa:
+    """Valores persistentes que un administrador puede modificar."""
+
+    empresa_activa: str
+    visibilidades_permitidas: tuple[str, ...]
+    llm_model: str
+    embedding_model: str
+    embedding_dimensiones: int
+    reindexacion_pendiente: bool = False
 
 
 @dataclass(frozen=True)
 class Configuracion:
-    """Valores validados que utilizará el pipeline de procesamiento."""
+    """Valores validados que utiliza el pipeline documental."""
 
     empresa: str
     visibilidades: tuple[str, ...]
@@ -28,79 +57,49 @@ class Configuracion:
 
     @property
     def ruta_empresa(self) -> Path:
-        """Devuelve la carpeta de la empresa activa."""
-
         return self.raiz_agente / self.empresa
 
     @property
     def rutas_conocimiento(self) -> tuple[Path, ...]:
-        """Devuelve las carpetas Public y/o Private habilitadas."""
-
         return tuple(self.ruta_empresa / nivel for nivel in self.visibilidades)
 
 
+def ruta_configuracion_operativa(raiz_agente: Path | None = None) -> Path:
+    """Devuelve la ubicación portable del archivo operativo."""
+
+    raiz = (raiz_agente or RAIZ_AGENTE).resolve()
+    return raiz / "config" / NOMBRE_CONFIGURACION_OPERATIVA
+
+
 def _leer_archivo_env(ruta_env: Path) -> dict[str, str]:
-    """Lee el archivo .env sin modificar globalmente el entorno de Python."""
+    """Lee el .env solo como fuente inicial e infraestructura local."""
 
     if not ruta_env.is_file():
         return {}
-
-    valores = dotenv_values(ruta_env)
     return {
         clave: valor
-        for clave, valor in valores.items()
+        for clave, valor in dotenv_values(ruta_env).items()
         if isinstance(valor, str)
     }
 
 
-def actualizar_valor_env(ruta_env: Path, clave: str, valor: str) -> None:
-    """Actualiza un valor específico en el archivo .env."""
-
-    if not ruta_env.is_file():
-        raise ValueError(f"El archivo {ruta_env} no existe.")
-
-    set_key(ruta_env, clave, valor)
-
-
-def _obtener_valor(
+def obtener_valor_infraestructura(
     nombre: str,
-    valores_archivo: dict[str, str],
-) -> str | None:
-    """Da prioridad al entorno del sistema sobre el archivo .env."""
+    *,
+    raiz_agente: Path | None = None,
+    ruta_env: Path | None = None,
+) -> str:
+    """Lee secretos e infraestructura desde el entorno o el archivo .env."""
 
-    return os.getenv(nombre) or valores_archivo.get(nombre)
-
-
-def _validar_empresa(empresa: str | None, raiz_agente: Path) -> str:
-    """Valida el nombre y comprueba que la empresa exista dentro de Agente."""
-
-    nombre = (empresa or "").strip()
-    if not nombre:
-        raise ErrorConfiguracion(
-            "No se indicó una empresa. Usa el parámetro 'empresa' o define "
-            "EMPRESA_ACTIVA en Agente/.env."
-        )
-
-    # Solo se acepta un nombre de carpeta, nunca una ruta absoluta o relativa.
-    if nombre in {".", ".."} or Path(nombre).name != nombre:
-        raise ErrorConfiguracion(
-            "EMPRESA_ACTIVA debe contener solo el nombre de la empresa, no una ruta."
-        )
-
-    ruta_empresa = raiz_agente / nombre
-    if not ruta_empresa.is_dir():
-        raise ErrorConfiguracion(
-            f"No existe la carpeta de la empresa '{nombre}' dentro de {raiz_agente}."
-        )
-
-    return nombre
+    raiz = (raiz_agente or RAIZ_AGENTE).resolve()
+    archivo_env = ruta_env or (raiz / ".env")
+    valor = os.getenv(nombre) or _leer_archivo_env(archivo_env).get(nombre, "")
+    return valor.strip()
 
 
 def _normalizar_visibilidades(
     visibilidades: str | Iterable[str] | None,
 ) -> tuple[str, ...]:
-    """Normaliza los niveles y rechaza valores distintos de Public o Private."""
-
     if visibilidades is None:
         elementos = list(VISIBILIDADES_VALIDAS)
     elif isinstance(visibilidades, str):
@@ -108,27 +107,248 @@ def _normalizar_visibilidades(
     else:
         elementos = list(visibilidades)
 
-    nombres_canonicos = {nivel.lower(): nivel for nivel in VISIBILIDADES_VALIDAS}
+    canonicas = {nivel.casefold(): nivel for nivel in VISIBILIDADES_VALIDAS}
     resultado: list[str] = []
-
     for elemento in elementos:
-        clave = elemento.strip().lower()
+        clave = str(elemento).strip().casefold()
         if not clave:
             continue
-        if clave not in nombres_canonicos:
-            permitidas = ", ".join(VISIBILIDADES_VALIDAS)
+        if clave not in canonicas:
             raise ErrorConfiguracion(
-                f"Visibilidad desconocida: '{elemento}'. Valores permitidos: {permitidas}."
+                f"Visibilidad desconocida: '{elemento}'. Valores permitidos: "
+                + ", ".join(VISIBILIDADES_VALIDAS)
+                + "."
             )
-
-        nivel = nombres_canonicos[clave]
+        nivel = canonicas[clave]
         if nivel not in resultado:
             resultado.append(nivel)
-
     if not resultado:
         raise ErrorConfiguracion("Debe indicarse al menos un nivel de visibilidad.")
-
     return tuple(resultado)
+
+
+def _normalizar_booleano(valor: object) -> bool:
+    if isinstance(valor, bool):
+        return valor
+    if isinstance(valor, str):
+        normalizado = valor.strip().casefold()
+        if normalizado in {"true", "1", "si", "sí"}:
+            return True
+        if normalizado in {"false", "0", "no", ""}:
+            return False
+    raise ErrorConfiguracion("REINDEXACION_PENDIENTE debe ser true o false.")
+
+
+def _normalizar_operativa(valores: Mapping[str, object]) -> ConfiguracionOperativa:
+    try:
+        dimensiones = int(valores["EMBEDDING_DIMENSIONS"])
+    except (KeyError, TypeError, ValueError) as error:
+        raise ErrorConfiguracion(
+            "EMBEDDING_DIMENSIONS debe ser un número entero."
+        ) from error
+    if dimensiones <= 0:
+        raise ErrorConfiguracion("EMBEDDING_DIMENSIONS debe ser mayor que cero.")
+
+    llm_model = str(valores.get("LLM_MODEL", "")).strip()
+    embedding_model = str(valores.get("EMBEDDING_MODEL", "")).strip()
+    if not llm_model:
+        raise ErrorConfiguracion("LLM_MODEL no puede estar vacío.")
+    if not embedding_model:
+        raise ErrorConfiguracion("EMBEDDING_MODEL no puede estar vacío.")
+
+    return ConfiguracionOperativa(
+        empresa_activa=str(valores.get("EMPRESA_ACTIVA", "")).strip(),
+        visibilidades_permitidas=_normalizar_visibilidades(
+            valores.get("VISIBILIDADES_PERMITIDAS")
+        ),
+        llm_model=llm_model,
+        embedding_model=embedding_model,
+        embedding_dimensiones=dimensiones,
+        reindexacion_pendiente=_normalizar_booleano(
+            valores.get("REINDEXACION_PENDIENTE", False)
+        ),
+    )
+
+
+def _serializar_operativa(
+    configuracion: ConfiguracionOperativa,
+) -> dict[str, object]:
+    return {
+        "EMPRESA_ACTIVA": configuracion.empresa_activa,
+        "VISIBILIDADES_PERMITIDAS": list(
+            configuracion.visibilidades_permitidas
+        ),
+        "LLM_MODEL": configuracion.llm_model,
+        "EMBEDDING_MODEL": configuracion.embedding_model,
+        "EMBEDDING_DIMENSIONS": configuracion.embedding_dimensiones,
+        "REINDEXACION_PENDIENTE": configuracion.reindexacion_pendiente,
+    }
+
+
+def _escribir_json_atomico(ruta: Path, datos: Mapping[str, object]) -> None:
+    """Escribe dentro del directorio montado y reemplaza el archivo al final."""
+
+    ruta.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, nombre_temporal = tempfile.mkstemp(
+        prefix=f".{ruta.name}.",
+        suffix=".tmp",
+        dir=ruta.parent,
+    )
+    temporal = Path(nombre_temporal)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as archivo:
+            json.dump(datos, archivo, ensure_ascii=False, indent=2)
+            archivo.write("\n")
+            archivo.flush()
+            os.fsync(archivo.fileno())
+        os.replace(temporal, ruta)
+    finally:
+        if temporal.exists():
+            temporal.unlink()
+
+
+def _valores_iniciales(
+    archivo_env: Path,
+) -> dict[str, object]:
+    """Migra una sola vez los valores operativos del entorno o .env actual."""
+
+    valores_archivo = _leer_archivo_env(archivo_env)
+    resultado: dict[str, object] = {}
+    for clave, predeterminado in VALORES_PREDETERMINADOS.items():
+        resultado[clave] = (
+            os.getenv(clave)
+            or valores_archivo.get(clave)
+            or predeterminado
+        )
+    resultado["REINDEXACION_PENDIENTE"] = False
+    return resultado
+
+
+def cargar_configuracion_operativa(
+    *,
+    raiz_agente: Path | None = None,
+    ruta_env: Path | None = None,
+    ruta_configuracion: Path | None = None,
+) -> ConfiguracionOperativa:
+    """Carga la configuración persistente y la inicializa cuando no existe.
+
+    La prioridad por clave es: archivo persistente, entorno/.env y valor
+    predeterminado. El .env solo participa en la migración inicial.
+    """
+
+    raiz = (raiz_agente or RAIZ_AGENTE).resolve()
+    archivo_env = ruta_env or (raiz / ".env")
+    archivo_configuracion = ruta_configuracion or ruta_configuracion_operativa(raiz)
+
+    if archivo_configuracion.is_file():
+        try:
+            datos_persistidos = json.loads(
+                archivo_configuracion.read_text(encoding="utf-8")
+            )
+        except (OSError, json.JSONDecodeError) as error:
+            raise ErrorConfiguracion(
+                f"La configuración operativa {archivo_configuracion} no es válida."
+            ) from error
+        if not isinstance(datos_persistidos, dict):
+            raise ErrorConfiguracion(
+                "La configuración operativa debe ser un objeto JSON."
+            )
+        valores = _valores_iniciales(archivo_env)
+        valores.update(datos_persistidos)
+    else:
+        valores = _valores_iniciales(archivo_env)
+
+    configuracion = _normalizar_operativa(valores)
+    datos_normalizados = _serializar_operativa(configuracion)
+    if not archivo_configuracion.is_file() or datos_persistidos != datos_normalizados:
+        _escribir_json_atomico(archivo_configuracion, datos_normalizados)
+    return configuracion
+
+
+def actualizar_configuracion_operativa(
+    cambios: Mapping[str, object],
+    *,
+    raiz_agente: Path | None = None,
+    ruta_env: Path | None = None,
+    ruta_configuracion: Path | None = None,
+) -> ConfiguracionOperativa:
+    """Persiste cambios administrativos sin modificar el archivo .env."""
+
+    desconocidas = set(cambios).difference(CLAVES_OPERATIVAS)
+    if desconocidas:
+        raise ErrorConfiguracion(
+            "Configuraciones operativas desconocidas: "
+            + ", ".join(sorted(desconocidas))
+            + "."
+        )
+
+    raiz = (raiz_agente or RAIZ_AGENTE).resolve()
+    archivo_configuracion = ruta_configuracion or ruta_configuracion_operativa(raiz)
+    actual = cargar_configuracion_operativa(
+        raiz_agente=raiz,
+        ruta_env=ruta_env,
+        ruta_configuracion=archivo_configuracion,
+    )
+    valores = _serializar_operativa(actual)
+    cambio_embeddings = any(
+        clave in cambios
+        and str(cambios[clave]).strip()
+        != str(valores[clave]).strip()
+        for clave in ("EMBEDDING_MODEL", "EMBEDDING_DIMENSIONS")
+    )
+    valores.update(cambios)
+    if cambio_embeddings:
+        valores["REINDEXACION_PENDIENTE"] = True
+
+    configuracion = _normalizar_operativa(valores)
+    _escribir_json_atomico(
+        archivo_configuracion,
+        _serializar_operativa(configuracion),
+    )
+    return configuracion
+
+
+def confirmar_reindexacion_operativa(
+    *,
+    raiz_agente: Path | None = None,
+    ruta_env: Path | None = None,
+    ruta_configuracion: Path | None = None,
+) -> ConfiguracionOperativa:
+    """Habilita la configuración nueva después de reconstruir ambos índices."""
+
+    raiz = (raiz_agente or RAIZ_AGENTE).resolve()
+    archivo_configuracion = ruta_configuracion or ruta_configuracion_operativa(raiz)
+    actual = cargar_configuracion_operativa(
+        raiz_agente=raiz,
+        ruta_env=ruta_env,
+        ruta_configuracion=archivo_configuracion,
+    )
+    valores = _serializar_operativa(actual)
+    valores["REINDEXACION_PENDIENTE"] = False
+    configuracion = _normalizar_operativa(valores)
+    _escribir_json_atomico(
+        archivo_configuracion,
+        _serializar_operativa(configuracion),
+    )
+    return configuracion
+
+
+def _validar_empresa(empresa: str | None, raiz_agente: Path) -> str:
+    nombre = (empresa or "").strip()
+    if not nombre:
+        raise ErrorConfiguracion(
+            "No se indicó una empresa. Define EMPRESA_ACTIVA en la "
+            "configuración operativa."
+        )
+    if nombre in {".", ".."} or Path(nombre).name != nombre:
+        raise ErrorConfiguracion(
+            "EMPRESA_ACTIVA debe contener solo el nombre de la empresa, no una ruta."
+        )
+    if not (raiz_agente / nombre).is_dir():
+        raise ErrorConfiguracion(
+            f"No existe la carpeta de la empresa '{nombre}' dentro de {raiz_agente}."
+        )
+    return nombre
 
 
 def cargar_configuracion(
@@ -137,40 +357,31 @@ def cargar_configuracion(
     *,
     raiz_agente: Path | None = None,
     ruta_env: Path | None = None,
+    ruta_configuracion: Path | None = None,
 ) -> Configuracion:
-    """Carga y valida la empresa activa y las fuentes que se pueden consultar.
-
-    La empresa recibida como parámetro tiene prioridad. Si no se proporciona,
-    se consulta EMPRESA_ACTIVA en el entorno y luego en el archivo ``.env``.
-    No existe una empresa predeterminada: su ausencia siempre produce un error.
-    """
+    """Carga empresa y visibilidades desde la configuración operativa."""
 
     raiz = (raiz_agente or RAIZ_AGENTE).resolve()
-    archivo_env = ruta_env or (raiz / ".env")
-    valores_archivo = _leer_archivo_env(archivo_env)
-
-    empresa_solicitada = empresa or _obtener_valor(
-        "EMPRESA_ACTIVA",
-        valores_archivo,
+    operativa = cargar_configuracion_operativa(
+        raiz_agente=raiz,
+        ruta_env=ruta_env,
+        ruta_configuracion=ruta_configuracion,
     )
-
-    if visibilidades is None:
-        visibilidades = _obtener_valor(
-            "VISIBILIDADES_PERMITIDAS",
-            valores_archivo,
-        )
-
-    empresa_validada = _validar_empresa(empresa_solicitada, raiz)
-    niveles = _normalizar_visibilidades(visibilidades)
-
-    # Detectar pronto una estructura incompleta produce errores más comprensibles.
+    empresa_validada = _validar_empresa(
+        empresa or operativa.empresa_activa,
+        raiz,
+    )
+    niveles = _normalizar_visibilidades(
+        visibilidades
+        if visibilidades is not None
+        else operativa.visibilidades_permitidas
+    )
     for nivel in niveles:
-        ruta_nivel = raiz / empresa_validada / nivel
-        if not ruta_nivel.is_dir():
+        if not (raiz / empresa_validada / nivel).is_dir():
             raise ErrorConfiguracion(
-                f"La empresa '{empresa_validada}' no tiene la carpeta requerida '{nivel}'."
+                f"La empresa '{empresa_validada}' no tiene la carpeta requerida "
+                f"'{nivel}'."
             )
-
     return Configuracion(
         empresa=empresa_validada,
         visibilidades=niveles,

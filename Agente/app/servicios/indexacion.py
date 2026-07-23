@@ -5,7 +5,11 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Callable
 
-from ..configuracion import cargar_configuracion
+from ..configuracion import (
+    cargar_configuracion,
+    cargar_configuracion_operativa,
+    confirmar_reindexacion_operativa,
+)
 from ..procesamiento import (
     descubrir_documentos,
     extraer_documentos,
@@ -41,9 +45,11 @@ def actualizar_conocimiento(
 
     if visibilidad_modificada not in {"Public", "Private"}:
         raise ValueError("La visibilidad debe ser Public o Private.")
+    operativa = cargar_configuracion_operativa()
     perfiles: tuple[PerfilIndice, ...] = (
         ("public", "internal")
         if visibilidad_modificada == "Public"
+        or operativa.reindexacion_pendiente
         else ("internal",)
     )
     configuracion_embeddings = cargar_configuracion_embeddings()
@@ -77,6 +83,7 @@ def actualizar_conocimiento(
                 proveedor,
                 empresa=empresa,
                 tamano_lote=tamano_lote,
+                reiniciar_coleccion=operativa.reindexacion_pendiente,
                 progreso=(
                     (
                         lambda actual, total, estado, referencia, perfil=perfil: progreso(
@@ -92,6 +99,10 @@ def actualizar_conocimiento(
                 ),
             )
         )
+    if operativa.reindexacion_pendiente and all(
+        resultado.indexacion_completa for resultado in resultados
+    ):
+        confirmar_reindexacion_operativa()
     return tuple(resultados)
 
 
