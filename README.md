@@ -1,4 +1,5 @@
 # Alianza F1 Knowledge Agent
+![Banner](./Imagenes/banner.png)
 
 ## Descripción
 
@@ -376,6 +377,8 @@ Los inspectores de recuperación y respuesta realizan llamadas a Gemini. Los tre
 
 El MVP fue desplegado en **Oracle Cloud Infrastructure** utilizando la arquitectura preparada con **OCI Compute + Docker**. Una sola instancia ejecuta Streamlit y conserva los documentos, la configuración operativa y ChromaDB en volúmenes del host.
 
+![OCI](./Imagenes/oci-app.png)
+
 ### Arquitectura desplegada
 
 ```text
@@ -431,17 +434,12 @@ Para el MVP no se requieren Object Storage, Vault, OKE, Load Balancer ni una bas
 
 ### Evidencias
 
-**Aplicación ejecutándose en OCI**
+Consultas y muestra de fragmentos usados.
+![Banner](./Imagenes/consulta-rag.png)
 
-**[INSERTAR CAPTURA DE LA APLICACIÓN EN OCI]**
 
-**Estado de los contenedores**
-
-**[INSERTAR CAPTURA DE docker compose ps]**
-
-**Registro de ejecución**
-
-**[INSERTAR CAPTURA O FRAGMENTO DE LOS LOGS DEL CONTENEDOR]**
+Carga de documentos públicos o privados
+![Banner](./Imagenes/carga-documentos.png)
 
 ## Ejecución de pruebas
 
