@@ -36,7 +36,7 @@ flowchart LR
 ```
 ## Interfaz
 
-![Interfaz del agente](./imagenes/interfaz.png)
+![Interfaz del agente](./Imagenes/interfaz.png)
 
 ### Flujo del RAG
 
