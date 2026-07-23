@@ -56,7 +56,27 @@ flowchart TB
 
 ![Interfaz del agente](./Imagenes/interfaz.png)
 
-### Flujo del RAG
+### Aplicación activa en OCI
+
+[Abrir Alianza F1 Knowledge Agent en Oracle Cloud Infrastructure](http://157.137.224.87:8501/)
+
+## Manual de usuario rápido
+
+La aplicación incluye dos documentos públicos de demostración, `BaseInstitucional.md` y `BasePropuestasComercial.md`, por lo que puede probarse desde el primer ingreso. Además, permite cargar nuevos documentos en las bibliotecas `Public` y `Private`.
+
+> Las pestañas **Public** y **Private** indican dónde se guardan los documentos. La opción **Acceso del agente** determina qué conocimiento puede consultar el chat.
+
+1. **Cargar documentos:** abre la pestaña `Public` o `Private`, despliega **Agregar documentos**, selecciona archivos Markdown, TXT, DOCX o PDF con texto nativo y pulsa **Guardar**.
+2. **Sincronizar el conocimiento:** después de cargar, modificar o eliminar documentos, pulsa **Sincronizar conocimiento Public** o **Sincronizar conocimiento Private**, según corresponda. Sincronizar `Public` actualiza los índices público e interno; sincronizar `Private` actualiza el índice interno. Espera el mensaje de finalización exitosa antes de consultar.
+3. **Reintentar si hay timeout:** si Gemini devuelve un error de tiempo de espera durante la sincronización, vuelve a pulsar el mismo botón hasta que el proceso termine correctamente. La indexación utiliza referencias deterministas y operaciones `upsert`, por lo que repetirla no duplica los fragmentos.
+4. **Elegir el acceso del chat:**
+   - `Public` consulta únicamente el índice de documentos públicos.
+   - `Internal (Public + Private)` consulta conjuntamente documentos públicos y privados.
+5. **Comprobar o cambiar el LLM:** en **General → Configuración LLM** puedes escribir el nombre de otro modelo Gemini y guardar el cambio. Esto resulta útil si el modelo actual no está disponible o agotó su cuota. Usa primero **Probar Modelo** para confirmar que el nuevo modelo responde; esta prueba es directa y no consulta documentos.
+6. **Consultar y verificar:** escribe la pregunta en el chat. Activa **Mostrar fuentes** para abrir el panel derecho con los documentos utilizados en la respuesta más reciente, incluyendo el nombre del archivo y su sección o página.
+7. **Enviar feedback:** debajo de cada respuesta puedes marcar pulgar arriba o abajo. Este feedback se conserva únicamente durante la sesión actual.
+
+## Flujo técnico del RAG
 
 1. **Descubrimiento:** localiza los documentos de la empresa activa dentro de `Public`, `Private` o ambas ubicaciones.
 2. **Extracción:** selecciona un extractor según la extensión y convierte el contenido a un modelo Markdown interno.
@@ -446,7 +466,7 @@ Para el MVP no se requieren Object Storage, Vault, OKE, Load Balancer ni una bas
 | Servicio de OCI | OCI Compute |
 | Fecha del despliegue | **[COMPLETAR FECHA DEL DESPLIEGUE]** |
 | Región | **[COMPLETAR REGIÓN DE OCI]** |
-| URL pública | **[COMPLETAR URL PÚBLICA]** |
+| URL pública | [http://157.137.224.87:8501/](http://157.137.224.87:8501/) |
 | Estado del endpoint de salud | **[INSERTAR RESULTADO DEL ENDPOINT DE SALUD]** |
 
 ### Evidencias
