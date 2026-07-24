@@ -3,7 +3,9 @@
 
 ## Descripción
 
-Agente documental corporativo basado en RAG (*Retrieval-Augmented Generation*) para consultar conocimiento empresarial mediante lenguaje natural. La aplicación procesa documentos, genera embeddings, recupera los fragmentos más relevantes y utiliza Gemini para responder exclusivamente con base en las fuentes encontradas.
+Alianza F1 es una agencia unipersonal especializada en el diseño, desarrollo e implementación de soluciones tecnológicas personalizadas, tales como software a medida, automatizaciones, integraciones y aplicaciones de Inteligencia Artificial, orientadas a optimizar procesos y acelerar la transformación digital de organizaciones de diversos sectores.
+
+El Agente documental corporativo basado en RAG (*Retrieval-Augmented Generation*) para consultar conocimiento empresarial mediante lenguaje natural. La aplicación procesa documentos, genera embeddings, recupera los fragmentos más relevantes y utiliza Gemini para responder exclusivamente con base en las fuentes encontradas.
 
 El proyecto fue desarrollado para el desafío **Alura Agente**, con una arquitectura modular y fácil de probar. Puede ejecutarse localmente con Python o Docker y cuenta con un despliegue realizado en Oracle Cloud Infrastructure (OCI).
 
@@ -58,7 +60,7 @@ flowchart TB
 
 ### Aplicación activa en OCI
 
-[Abrir Alianza F1 Knowledge Agent en Oracle Cloud Infrastructure](http://157.137.224.87:8501/)
+[Abrir Alianza F1 Knowledge Agent en Oracle Cloud Infrastructure](https://ia.tecnologiaydesarrolloweb.com/)
 
 ## Manual de usuario rápido
 
