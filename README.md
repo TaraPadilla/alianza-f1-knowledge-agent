@@ -3,7 +3,7 @@
 
 ## Descripción
 
-Alianza F1 es una agencia unipersonal especializada en el diseño, desarrollo e implementación de soluciones tecnológicas personalizadas, tales como software a medida, automatizaciones, integraciones y aplicaciones de Inteligencia Artificial, orientadas a optimizar procesos y acelerar la transformación digital de organizaciones de diversos sectores.
+Alianza F1 es una agencia especializada en el diseño, desarrollo e implementación de soluciones tecnológicas personalizadas, tales como software a medida, automatizaciones, integraciones y aplicaciones de Inteligencia Artificial, orientadas a optimizar procesos y acelerar la transformación digital de organizaciones de diversos sectores. Fundada y dirigida por Tara Padilla.
 
 El Agente documental corporativo basado en RAG (*Retrieval-Augmented Generation*) para consultar conocimiento empresarial mediante lenguaje natural. La aplicación procesa documentos, genera embeddings, recupera los fragmentos más relevantes y utiliza Gemini para responder exclusivamente con base en las fuentes encontradas.
 
